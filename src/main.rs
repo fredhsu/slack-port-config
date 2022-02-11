@@ -6,6 +6,7 @@ use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
 use url::Url;
 mod cvp;
+mod slack;
 
 #[derive(Deserialize, Debug)]
 struct AppsConnectionsOpenResponse {
@@ -173,7 +174,7 @@ async fn main() -> Result<(), reqwest::Error> {
     let device = cv.get_device("F799ECF9B7DA78B0BC849B972D16E373").await?;
     println!("device: {:?}", device);
 
-
+    let mut slack = slack::Client::new();
     let base_url = "https://slack.com/api/".to_owned();
     let client = reqwest::Client::new();
     let connection_response = client
