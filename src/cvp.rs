@@ -72,7 +72,10 @@ impl Host {
         self.get(path).await
     }
     pub async fn get_device(&self, device_id: &str) -> Result<String, reqwest::Error> {
-        let path = format!("/api/resources/inventory/v1/Device?key.deviceId={}", device_id);
+        let path = format!(
+            "/api/resources/inventory/v1/Device?key.deviceId={}",
+            device_id
+        );
         self.get(&path).await
     }
 }

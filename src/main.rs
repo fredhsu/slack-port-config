@@ -175,23 +175,15 @@ async fn main() -> Result<(), reqwest::Error> {
     println!("device: {:?}", device);
 
     let mut slack = slack::Client::new();
-    let base_url = "https://slack.com/api/".to_owned();
-    let client = reqwest::Client::new();
-    let connection_response = client
-        .post(base_url + "apps.connections.open")
-        .header(AUTHORIZATION, "Bearer ".to_owned() + socket_token)
-        .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .send()
-        .await?
-        .json::<AppsConnectionsOpenResponse>()
-        .await?;
+    let wss_url = slack.get_wss_url().await.unwrap();
 
-    let wss_url = connection_response.url.unwrap();
-    println!("wss_url = {:?}", wss_url);
-    let (mut socket, response) = connect(Url::parse(&wss_url).unwrap()).expect("Can't connect");
+    let mut socket = slack.connect().await;
+    if let Some(socket) = socket {
     let msg = socket.read_message().expect("Error reading message");
     //let hello: Hello = serde_json::from_str(&msg).unwrap();
     println!("recevied hello: {:?}", msg);
+    }
+    /*
     loop {
         let msg = socket.read_message().expect("Error reading message");
         if let tungstenite::Message::Text(msg) = msg {
@@ -222,6 +214,7 @@ async fn main() -> Result<(), reqwest::Error> {
         }
         // send ack back to slack with envelope_id
     }
+    */
     Ok(())
 }
 
