@@ -1,6 +1,7 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Error, ErrorKind};
 
 use std::net::TcpStream;
 use tungstenite::stream::MaybeTlsStream;
@@ -16,52 +17,51 @@ struct AppsConnectionsOpenResponse {
 
 pub struct Client {
     //Make option and handle if no token is provided
-    token: Option<String>,
+    token: String,
     wss_url: Option<Url>,
 }
 
 impl Client {
-    pub fn new() -> Self {
+    pub fn new(token: String) -> Self {
         Client {
-            token: None,
+            token,
             wss_url: None,
         }
     }
     pub async fn get_wss_url(&self) -> Result<(), reqwest::Error> {
-        // TODO: add check for token is available
-        if let Some(token) = self.token {
-            let base_url = "https://slack.com/api/".to_owned();
-            let client = reqwest::Client::new();
-            let connection_response = client
-                .post(base_url + "apps.connections.open")
-                .bearer_auth(token)
-                .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .send()
-                .await?
-                .json::<AppsConnectionsOpenResponse>()
-                .await?;
+        let base_url = "https://slack.com/api/".to_owned();
+        let client = reqwest::Client::new();
+        let connection_response = client
+            .post(base_url + "apps.connections.open")
+            .bearer_auth(&self.token)
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .send()
+            .await?
+            .json::<AppsConnectionsOpenResponse>()
+            .await?;
 
-            let wss_url = connection_response.url.unwrap();
-            let url = Url::parse(&wss_url).unwrap();
-        }
+        let wss_url = connection_response.url.unwrap();
+        let url = Url::parse(&wss_url).unwrap();
         Ok(())
     }
+
     pub async fn connect(
-        &self,
-    ) -> tungstenite::WebSocket<MaybeTlsStream<TcpStream>> {
-        let url = &self.get_wss_url().await?;
-        if let url = Some(url) {
-        let (mut socket, response) = connect(url).expect("Can't connect");
-        let msg = socket.read_message().expect("Error reading message");
-        //let hello: Hello = serde_json::from_str(&msg).unwrap();
-        println!("recevied hello: {:?}", msg);
-        socket
-            }
+        &mut self,
+    ) -> Result<tungstenite::WebSocket<MaybeTlsStream<TcpStream>>, Error> {
+        self.get_wss_url().await;
+        if let Some(url) = &self.wss_url {
+            let (mut socket, response) = connect(url).expect("Can't connect");
+            let msg = socket.read_message().expect("Error reading message");
+            println!("recevied hello: {:?}", msg);
+            Ok(socket)
+        } else {
+            Err(Error::new(ErrorKind::Other, "oh no!"))
+        }
     }
     pub fn get_token_from_file(&mut self, filename: String) -> Result<(), std::io::Error> {
         let t = fs::read_to_string(filename)?;
         let token = t.trim().to_string();
-        self.token = Some(token);
+        self.token = token;
         Ok(())
     }
 }
