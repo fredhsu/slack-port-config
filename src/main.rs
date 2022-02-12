@@ -1,6 +1,7 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use tungstenite::{connect, Message};
+use slack::{Block, BlockPayload, TextBlock};
 mod cvp;
 mod slack;
 
@@ -49,24 +50,6 @@ struct Response {
     payload: BlockPayload,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct BlockPayload {
-    blocks: Vec<Block>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Block {
-    #[serde(rename = "type")]
-    block_type: String,
-    text: TextBlock,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct TextBlock {
-    #[serde(rename = "type")]
-    text_type: String,
-    text: String,
-}
 
 // TODO: create enum for event payloads and event_types
 #[derive(Deserialize, Debug)]
@@ -233,29 +216,21 @@ fn handle_text(t: &str, slack: &mut slack::Client) {
     }
 }
 
+// TODO different commands, /portinfo walljack #
+// /portassign walljack - trigger static select
+// sends notification to channel with @ of admins
+// /portdown walljack
+// /portup walljack
 fn handle_slash_command(
     slack: &mut slack::Client,
     payload: slack::SlashCommand,
     envelope_id: String,
 ) {
-    let block_type = "section";
-    let text_type = "mrkdwn";
-    let block1 = Block {
-        block_type: block_type.to_string(),
-        text: TextBlock {
-            text_type: text_type.to_string(),
-            text: "switch 1".to_owned(),
-        },
-    };
-    let block2 = Block {
-        block_type: block_type.to_string(),
-        text: TextBlock {
-            text_type: text_type.to_string(),
-            text: "port 1".to_owned(),
-        },
-    };
+    let first = format!("Getting status for port {}", payload.text);
+    let block1 = Block::new_section(TextBlock::new_mrkdwn(first));
+    let block2 = Block::new_section(TextBlock::new_mrkdwn("This is another test".to_owned()));
     let blocks = vec![block1, block2];
-    let payload = BlockPayload { blocks };
+    let payload = BlockPayload::new(blocks);
 
     // send block back as resposne
     let response = Response {

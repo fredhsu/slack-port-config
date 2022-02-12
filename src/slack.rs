@@ -126,7 +126,7 @@ pub struct SlashCommand {
     user_id: String,
     user_name: String,
     command: String,
-    text: String,
+    pub text: String,
     api_app_id: String,
     is_enterprise_install: String,
     response_url: String,
@@ -140,18 +140,23 @@ struct Response {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct BlockPayload {
+pub struct BlockPayload {
     blocks: Vec<Block>,
+}
+impl BlockPayload {
+    pub fn new(blocks: Vec<Block>) -> Self {
+        BlockPayload { blocks}
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Block {
+pub struct Block {
     #[serde(rename = "type")]
     block_type: String,
     text: TextBlock,
 }
 impl Block {
-    fn new_section(text: TextBlock) -> Self {
+    pub fn new_section(text: TextBlock) -> Self {
         Block {
             block_type: "section".to_owned(),
             text,
@@ -160,13 +165,13 @@ impl Block {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct TextBlock {
+pub struct TextBlock {
     #[serde(rename = "type")]
     text_type: String,
     text: String,
 }
 impl TextBlock {
-    fn new_mrkdwn(text: String) -> TextBlock {
+    pub fn new_mrkdwn(text: String) -> TextBlock {
         TextBlock {
             text_type: "mrkdwn".to_owned(),
             text,
@@ -174,9 +179,8 @@ impl TextBlock {
     }
 }
 
-pub async fn handle_slash_command(
+pub fn handle_slash_command(
     socket: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>,
-    payload: SlashCommand,
     envelope_id: String,
 ) {
     let block_type = "section";
