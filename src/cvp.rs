@@ -67,6 +67,29 @@ impl Host {
             Ok("".to_string())
         }
     }
+    async fn post(&self, path: &str) -> Result<String, reqwest::Error> {
+        if let Some(token) = &self.token {
+            let url = format!("https://{}{}", self.hostname, path);
+            let client = reqwest::Client::new();
+            let response = client
+                .post(url)
+                .header(ACCEPT, "application/json")
+                .bearer_auth(token.to_string())
+                .send()
+                .await?
+                .text()
+                .await?;
+            Ok(response)
+        } else {
+            // TODO: use an error to indicate no token
+            Ok("".to_string())
+        }
+    }
+    pub async fn get_tags(&self) -> Result<String, reqwest::Error> {
+        let path = "/api/resources/tag/v2/Tag/all";
+        self.post(path).await
+    }
+
     pub async fn get_all_devices(&self) -> Result<String, reqwest::Error> {
         let path = "/api/resources/inventory/v1/Device/all";
         self.get(path).await

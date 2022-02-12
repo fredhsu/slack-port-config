@@ -1,10 +1,6 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
-//use serde_json::Result;
-use std::net::TcpStream;
-use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
-use url::Url;
 mod cvp;
 mod slack;
 
@@ -31,24 +27,7 @@ struct Channel {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-enum SocketEvent {
-    #[serde(rename = "events_api")]
-    EventsApi {
-        payload: EventCallback,
-        envelope_id: String,
-        accepts_response_payload: bool,
-    },
-    #[serde(rename = "slash_commands")]
-    SlashCommands {
-        payload: SlashCommand,
-        envelope_id: String,
-        accepts_response_payload: bool,
-    },
-}
-
-#[derive(Deserialize, Debug)]
-struct SlashCommand {
+pub struct SlashCommand {
     token: String,
     team_id: String,
     team_domain: String,
@@ -168,59 +147,95 @@ async fn main() -> Result<(), reqwest::Error> {
         "fredlhsu@arista.com",
         "arista",
     );
-    cv.get_token_from_file("token.txt".to_string());
-    let inventory = cv.get_all_devices().await?;
-    println!("{}", inventory);
-    let device = cv.get_device("F799ECF9B7DA78B0BC849B972D16E373").await?;
-    println!("device: {:?}", device);
+    cv.get_token_from_file("tokens/token.txt".to_string())
+        .unwrap();
+    // let inventory = cv.get_all_devices().await?;
+    // println!("Getting Inventory");
+    // println!("{}", inventory);
+    // let device = cv.get_device("F799ECF9B7DA78B0BC849B972D16E373").await?;
+    // println!("device: {:?}", device);
+    let tags = cv.get_tags().await?;
+    println!("Tags: {}", tags);
 
-    let mut slack = slack::Client::new();
+    let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
+    let mut slack = slack::Client::new(slack_token);
     let wss_url = slack.get_wss_url().await.unwrap();
 
-    let mut socket = slack.connect().await;
-    if let Some(socket) = socket {
-    let msg = socket.read_message().expect("Error reading message");
-    //let hello: Hello = serde_json::from_str(&msg).unwrap();
-    println!("recevied hello: {:?}", msg);
-    }
-    /*
+    slack.connect().await.unwrap();
     loop {
-        let msg = socket.read_message().expect("Error reading message");
-        if let tungstenite::Message::Text(msg) = msg {
-            println!("Received message: {}", msg);
-            let socket_event: SocketEvent = serde_json::from_str(&msg).unwrap();
-            println!("Received: {:?}", socket_event);
-            match socket_event {
-                SocketEvent::EventsApi {
-                    payload,
-                    envelope_id,
-                    accepts_response_payload,
-                } => {
-                    println!("{:?}", payload);
-                    if payload.event.text.ends_with("quit") {
-                        break;
-                    }
-                }
-                SocketEvent::SlashCommands {
-                    payload,
-                    envelope_id,
-                    accepts_response_payload,
-                } => {
-                    println!("{} is : {:?}", payload.command, payload.text);
-                    handle_slash_command(&mut socket, payload, envelope_id);
-                }
-                _ => {}
-            }
+        let msg = slack.receive_message().await.unwrap();
+        match msg {
+            Message::Text(t) => handle_text(&t, &mut slack),
+            Message::Binary(b) => println!("binary"),
+            Message::Ping(p) => println!("{:?}", p),
+            Message::Pong(p) => println!("{:?}", p),
+            Message::Close(_) => println!("Close"),
         }
-        // send ack back to slack with envelope_id
+
+        // let msg = socket.read_message().expect("Error reading message");
+        //let hello: Hello = serde_json::from_str(&msg).unwrap();
+        // println!("recevied hello: {:?}", msg);
+        /*
+        loop {
+            let msg = socket.read_message().expect("Error reading message");
+            if let tungstenite::Message::Text(msg) = msg {
+                println!("Received message: {}", msg);
+                let socket_event: SocketEvent = serde_json::from_str(&msg).unwrap();
+                println!("Received: {:?}", socket_event);
+                match socket_event {
+                    SocketEvent::EventsApi {
+                        payload,
+                        envelope_id,
+                        accepts_response_payload,
+                    } => {
+                        println!("{:?}", payload);
+                        if payload.event.text.ends_with("quit") {
+                            break;
+                        }
+                    }
+                    SocketEvent::SlashCommands {
+                        payload,
+                        envelope_id,
+                        accepts_response_payload,
+                    } => {
+                        println!("{} is : {:?}", payload.command, payload.text);
+                        handle_slash_command(&mut socket, payload, envelope_id);
+                    }
+                    _ => {}
+                }
+            }
+            // send ack back to slack with envelope_id
+        */
     }
-    */
     Ok(())
 }
 
+fn handle_text(t: &str, slack: &mut slack::Client) {
+    let socket_event = slack::parse_message(t);
+            println!("{:?}", &socket_event);
+    match socket_event {
+        slack::SocketEvent::EventsApi {
+            payload,
+            envelope_id,
+            accepts_response_payload,
+        } => {
+            println!("{:?}", payload);
+        }
+        slack::SocketEvent::SlashCommands {
+            payload,
+            envelope_id,
+            accepts_response_payload,
+        } => {
+            println!("Received slash command: {:?}", payload);
+            handle_slash_command(slack, payload, envelope_id);
+        }
+        _ => {}
+    }
+}
+
 fn handle_slash_command(
-    socket: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>,
-    payload: SlashCommand,
+    slack: &mut slack::Client,
+    payload: slack::SlashCommand,
     envelope_id: String,
 ) {
     let block_type = "section";
@@ -229,7 +244,7 @@ fn handle_slash_command(
         block_type: block_type.to_string(),
         text: TextBlock {
             text_type: text_type.to_string(),
-            text: "#switch 1".to_owned(),
+            text: "switch 1".to_owned(),
         },
     };
     let block2 = Block {
@@ -248,8 +263,6 @@ fn handle_slash_command(
         payload,
     };
     let response_json = serde_json::to_string(&response).unwrap();
-    println!("send message {}", &response_json);
-    socket
-        .write_message(Message::Text(response_json.into()))
-        .unwrap();
+    slack.send_message(&response_json);
+    println!("slack wrote message: {}", response_json);
 }
