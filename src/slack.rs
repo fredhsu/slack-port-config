@@ -30,6 +30,7 @@ pub enum SocketEvent {
         envelope_id: String,
         accepts_response_payload: bool,
     },
+    // TODO: Add interactive
 }
 #[derive(Deserialize, Debug)]
 pub struct AppMention {
@@ -107,12 +108,12 @@ impl Client {
             .expect("Error reading message"))
     }
     pub fn send_message(&mut self, msg: &str) {
-    println!("send message {}", msg);
-    self.socket
-        .as_mut()
-        .unwrap()
-        .write_message(Message::Text(msg.into()))
-        .unwrap();
+        println!("send message {}", msg);
+        self.socket
+            .as_mut()
+            .unwrap()
+            .write_message(Message::Text(msg.into()))
+            .unwrap();
     }
 }
 
@@ -145,7 +146,7 @@ pub struct BlockPayload {
 }
 impl BlockPayload {
     pub fn new(blocks: Vec<Block>) -> Self {
-        BlockPayload { blocks}
+        BlockPayload { blocks }
     }
 }
 
@@ -154,12 +155,73 @@ pub struct Block {
     #[serde(rename = "type")]
     block_type: String,
     text: TextBlock,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    fields: Option<Vec<TextBlock>>,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    accessory: Option<StaticSelect>,
 }
 impl Block {
     pub fn new_section(text: TextBlock) -> Self {
         Block {
             block_type: "section".to_owned(),
             text,
+            fields: None,
+            accessory: None,
+        }
+    }
+    pub fn add_accessory(&mut self, element: StaticSelect) {
+        self.accessory = Some(element);
+    }
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Element {}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StaticSelect {
+    #[serde(rename = "type")]
+    element_type: String,
+    placeholder: TextBlock,
+    action_id: String,
+    options: Vec<OptionObject>,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    option_groups: Option<Vec<OptionObject>>,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    initial_option: Option<OptionObject>,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    confirm: Option<ConfirmObject>,
+    focus_on_load: bool,
+}
+impl StaticSelect {
+    pub fn new(placeholder: TextBlock, action_id: String, options: Vec<OptionObject>) -> Self {
+        StaticSelect {
+            element_type: "static_select".to_string(),
+            placeholder,
+            action_id,
+            options,
+            option_groups: None,
+            initial_option: None,
+            confirm: None,
+            focus_on_load: false,
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ConfirmObject {}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OptionObject {
+    text: TextBlock,
+    value: String,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+   #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+}
+impl OptionObject {
+    pub fn new(text: TextBlock, value: String) -> Self {
+        OptionObject{
+            text,
+            value,
+            description: None,
+            url: None,
         }
     }
 }
@@ -171,6 +233,12 @@ pub struct TextBlock {
     text: String,
 }
 impl TextBlock {
+    pub fn new_plain(text: String) -> TextBlock {
+        TextBlock {
+            text_type: "plain_text".to_owned(),
+            text,
+        }
+    }
     pub fn new_mrkdwn(text: String) -> TextBlock {
         TextBlock {
             text_type: "mrkdwn".to_owned(),

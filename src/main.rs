@@ -1,7 +1,7 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
+use slack::*;
 use tungstenite::{connect, Message};
-use slack::{Block, BlockPayload, TextBlock};
 mod cvp;
 mod slack;
 
@@ -27,29 +27,12 @@ struct Channel {
     creator: String,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct SlashCommand {
-    token: String,
-    team_id: String,
-    team_domain: String,
-    channel_id: String,
-    channel_name: String,
-    user_id: String,
-    user_name: String,
-    command: String,
-    text: String,
-    api_app_id: String,
-    is_enterprise_install: String,
-    response_url: String,
-    trigger_id: String,
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Response {
     envelope_id: String,
     payload: BlockPayload,
 }
-
 
 // TODO: create enum for event payloads and event_types
 #[derive(Deserialize, Debug)]
@@ -195,7 +178,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
 fn handle_text(t: &str, slack: &mut slack::Client) {
     let socket_event = slack::parse_message(t);
-            println!("{:?}", &socket_event);
+    println!("{:?}", &socket_event);
     match socket_event {
         slack::SocketEvent::EventsApi {
             payload,
@@ -227,7 +210,11 @@ fn handle_slash_command(
     envelope_id: String,
 ) {
     let first = format!("Getting status for port {}", payload.text);
-    let block1 = Block::new_section(TextBlock::new_mrkdwn(first));
+    let placeholder = TextBlock::new_plain("placeholder".to_string());
+    let option1 = OptionObject::new(TextBlock::new_plain("this is plain".to_string()), "value-0".to_string());
+    let accessory = StaticSelect::new(placeholder, "action123".to_string(), vec![option1]);
+    let mut block1 = Block::new_section(TextBlock::new_mrkdwn(first));
+    block1.add_accessory(accessory);
     let block2 = Block::new_section(TextBlock::new_mrkdwn("This is another test".to_owned()));
     let blocks = vec![block1, block2];
     let payload = BlockPayload::new(blocks);
