@@ -124,7 +124,7 @@ impl Client {
     pub async fn connect(&mut self) -> Result<(), Error> {
         self.get_wss_url().await;
         if let Some(url) = &self.wss_url {
-            let (mut socket, response) = connect(url).expect("Can't connect");
+            let (mut socket, _response) = connect(url).expect("Can't connect");
             let msg = socket.read_message().expect("Error reading message");
             println!("recevied hello: {:?}", msg);
             self.socket = Some(socket);
@@ -308,8 +308,6 @@ pub fn handle_slash_command(
     socket: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>,
     envelope_id: String,
 ) {
-    let block_type = "section";
-    let text_type = "mrkdwn";
     let block1 = Block::new_section(TextBlock::new_mrkdwn("This is a test".to_owned()));
     let block2 = Block::new_section(TextBlock::new_mrkdwn("This is another test".to_owned()));
     let blocks = vec![block1, block2];

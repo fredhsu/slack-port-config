@@ -1,7 +1,7 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use slack::*;
-use tungstenite::{connect, Message};
+use tungstenite::Message;
 mod cvp;
 mod slack;
 
@@ -124,7 +124,7 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
     let mut slack = slack::Client::new(slack_token);
-    let wss_url = slack.get_wss_url().await.unwrap();
+    // let wss_url = slack.get_wss_url().await.unwrap();
 
     slack.connect().await.unwrap();
     loop {
@@ -134,7 +134,7 @@ async fn main() -> Result<(), reqwest::Error> {
             Message::Binary(b) => println!("binary"),
             Message::Ping(p) => println!("{:?}", p),
             Message::Pong(p) => println!("{:?}", p),
-            Message::Close(_) => println!("Close"),
+            Message::Close(_) => break,
         }
     }
     Ok(())
@@ -166,7 +166,7 @@ async fn handle_text(t: &str, slack: &mut slack::Client) {
             accepts_response_payload,
         } => {
             println!("Received interactive: {:?}", payload);
-            handle_interactive(slack, payload, envelope_id).await;
+            handle_interactive(slack, payload).await;
             println!("response sent");
         }
         _ => {}
@@ -176,14 +176,10 @@ async fn handle_text(t: &str, slack: &mut slack::Client) {
 async fn handle_interactive(
     slack: &mut slack::Client,
     payload: slack::Interactive,
-    envelope_id: String,
 ) {
     println!("Received interactive with actions {:?}", payload.actions);
-    let walljack = "test";
-    let segment_id = "100";
     let text = format!(
-        "Wall jack: {} updated with segement ID {}",
-        walljack,
+        "Updated with segement ID {}",
         payload.actions.first().unwrap().selected_option.text.text
     );
     let message = slack::MessagePayload {
@@ -192,18 +188,21 @@ async fn handle_interactive(
         thread_ts: None,
         mrkdwn: false,
     };
+    // Resposne to an interactive action is via response_url which is specific to the action and will tie into the block that sent the action
     let response_json = serde_json::to_string(&message).unwrap();
     println!("responding to : {}", &payload.response_url);
     let client = reqwest::Client::new();
-    let res = client
+    client
         .post(&payload.response_url)
         .body(response_json)
         .send()
         .await
         .unwrap();
+        //TODO remove semicolon and make this return value
 }
 
-// TODO different commands, /portinfo walljack #
+// logic for different slash commands
+// /portinfo walljack #
 // /portassign walljack - trigger static select
 // sends notification to channel with @ of admins
 // /portdown walljack
@@ -216,32 +215,32 @@ fn handle_slash_command(
     let command = &payload.get_command();
     match command.as_str() {
         "portcheck" => portcheck(&payload.text, &envelope_id, slack),
-        "portassign" => println!("send menu"),
+        "portassign" => port_assign(&payload.text, &envelope_id, slack),
         "portdown" => println!("Shutting down port {}", &payload.text),
         "portup" => println!("Bringing port {} up", &payload.text),
         _ => println!("Unknown command"),
     }
-    let first = format!("Getting status for port {}", payload.text);
-    let placeholder = TextBlock::new_plain("placeholder".to_string());
-    let option1 = OptionObject::new(
-        TextBlock::new_plain("this is plain".to_string()),
-        "value-0".to_string(),
-    );
-    let accessory = StaticSelect::new(placeholder, "action123".to_string(), vec![option1]);
-    let mut block1 = Block::new_section(TextBlock::new_mrkdwn(first));
-    block1.add_accessory(accessory);
-    let block2 = Block::new_section(TextBlock::new_mrkdwn("This is another test".to_owned()));
-    let blocks = vec![block1, block2];
-    let payload = BlockPayload::new(blocks);
+    // let first = format!("Getting status for port {}", payload.text);
+    // let placeholder = TextBlock::new_plain("placeholder".to_string());
+    // let option1 = OptionObject::new(
+    //     TextBlock::new_plain("this is plain".to_string()),
+    //     "value-0".to_string(),
+    // );
+    // let accessory = StaticSelect::new(placeholder, "action123".to_string(), vec![option1]);
+    // let mut block1 = Block::new_section(TextBlock::new_mrkdwn(first));
+    // block1.add_accessory(accessory);
+    // let block2 = Block::new_section(TextBlock::new_mrkdwn("This is another test".to_owned()));
+    // let blocks = vec![block1, block2];
+    // let payload = BlockPayload::new(blocks);
 
     // send block back as resposne
-    let response = Response {
-        envelope_id,
-        payload,
-    };
-    let response_json = serde_json::to_string(&response).unwrap();
-    slack.send_message(&response_json);
-    println!("slack wrote message: {}", response_json);
+    // let response = Response {
+    //     envelope_id,
+    //     payload,
+    // };
+    // let response_json = serde_json::to_string(&response).unwrap();
+    // slack.send_message(&response_json);
+    // println!("slack wrote message: {}", response_json);
 }
 
 fn portcheck(text: &str, envelope_id: &str, slack: &mut slack::Client) {
@@ -260,10 +259,10 @@ fn portcheck(text: &str, envelope_id: &str, slack: &mut slack::Client) {
 }
 
 fn port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
-    let placeholder = TextBlock::new_plain("placeholder".to_string());
+    let placeholder = TextBlock::new_plain("segment".to_string());
     let option1 = OptionObject::new(
-        TextBlock::new_plain("this is plain".to_string()),
-        "value-0".to_string(),
+        TextBlock::new_plain("USERS:VLAN 100".to_string()),
+        "vlan100".to_string(),
     );
     let accessory = StaticSelect::new(placeholder, "action123".to_string(), vec![option1]);
     let first = format!("Choose a segment for walljack: {}", text);
