@@ -27,7 +27,6 @@ struct Channel {
     creator: String,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 struct Response {
     envelope_id: String,
@@ -131,52 +130,18 @@ async fn main() -> Result<(), reqwest::Error> {
     loop {
         let msg = slack.receive_message().await.unwrap();
         match msg {
-            Message::Text(t) => handle_text(&t, &mut slack),
+            Message::Text(t) => handle_text(&t, &mut slack).await,
             Message::Binary(b) => println!("binary"),
             Message::Ping(p) => println!("{:?}", p),
             Message::Pong(p) => println!("{:?}", p),
             Message::Close(_) => println!("Close"),
         }
-
-        // let msg = socket.read_message().expect("Error reading message");
-        //let hello: Hello = serde_json::from_str(&msg).unwrap();
-        // println!("recevied hello: {:?}", msg);
-        /*
-        loop {
-            let msg = socket.read_message().expect("Error reading message");
-            if let tungstenite::Message::Text(msg) = msg {
-                println!("Received message: {}", msg);
-                let socket_event: SocketEvent = serde_json::from_str(&msg).unwrap();
-                println!("Received: {:?}", socket_event);
-                match socket_event {
-                    SocketEvent::EventsApi {
-                        payload,
-                        envelope_id,
-                        accepts_response_payload,
-                    } => {
-                        println!("{:?}", payload);
-                        if payload.event.text.ends_with("quit") {
-                            break;
-                        }
-                    }
-                    SocketEvent::SlashCommands {
-                        payload,
-                        envelope_id,
-                        accepts_response_payload,
-                    } => {
-                        println!("{} is : {:?}", payload.command, payload.text);
-                        handle_slash_command(&mut socket, payload, envelope_id);
-                    }
-                    _ => {}
-                }
-            }
-            // send ack back to slack with envelope_id
-        */
     }
     Ok(())
 }
 
-fn handle_text(t: &str, slack: &mut slack::Client) {
+async fn handle_text(t: &str, slack: &mut slack::Client) {
+    println!("*** Incoming text *** \n {:?}", t);
     let socket_event = slack::parse_message(t);
     println!("{:?}", &socket_event);
     match socket_event {
@@ -195,8 +160,47 @@ fn handle_text(t: &str, slack: &mut slack::Client) {
             println!("Received slash command: {:?}", payload);
             handle_slash_command(slack, payload, envelope_id);
         }
+        slack::SocketEvent::Interactive {
+            payload,
+            envelope_id,
+            accepts_response_payload,
+        } => {
+            println!("Received interactive: {:?}", payload);
+            handle_interactive(slack, payload, envelope_id).await;
+            println!("response sent");
+        }
         _ => {}
     }
+}
+
+async fn handle_interactive(
+    slack: &mut slack::Client,
+    payload: slack::Interactive,
+    envelope_id: String,
+) {
+    println!("Received interactive with actions {:?}", payload.actions);
+    let walljack = "test";
+    let segment_id = "100";
+    let text = format!(
+        "Wall jack: {} updated with segement ID {}",
+        walljack,
+        payload.actions.first().unwrap().selected_option.text.text
+    );
+    let message = slack::MessagePayload {
+        text,
+        blocks: None,
+        thread_ts: None,
+        mrkdwn: false,
+    };
+    let response_json = serde_json::to_string(&message).unwrap();
+    println!("responding to : {}", &payload.response_url);
+    let client = reqwest::Client::new();
+    let res = client
+        .post(&payload.response_url)
+        .body(response_json)
+        .send()
+        .await
+        .unwrap();
 }
 
 // TODO different commands, /portinfo walljack #
@@ -209,9 +213,20 @@ fn handle_slash_command(
     payload: slack::SlashCommand,
     envelope_id: String,
 ) {
+    let command = &payload.get_command();
+    match command.as_str() {
+        "portcheck" => portcheck(&payload.text, &envelope_id, slack),
+        "portassign" => println!("send menu"),
+        "portdown" => println!("Shutting down port {}", &payload.text),
+        "portup" => println!("Bringing port {} up", &payload.text),
+        _ => println!("Unknown command"),
+    }
     let first = format!("Getting status for port {}", payload.text);
     let placeholder = TextBlock::new_plain("placeholder".to_string());
-    let option1 = OptionObject::new(TextBlock::new_plain("this is plain".to_string()), "value-0".to_string());
+    let option1 = OptionObject::new(
+        TextBlock::new_plain("this is plain".to_string()),
+        "value-0".to_string(),
+    );
     let accessory = StaticSelect::new(placeholder, "action123".to_string(), vec![option1]);
     let mut block1 = Block::new_section(TextBlock::new_mrkdwn(first));
     block1.add_accessory(accessory);
@@ -227,4 +242,34 @@ fn handle_slash_command(
     let response_json = serde_json::to_string(&response).unwrap();
     slack.send_message(&response_json);
     println!("slack wrote message: {}", response_json);
+}
+
+fn portcheck(text: &str, envelope_id: &str, slack: &mut slack::Client) {
+    let walljack = text;
+    let switchport = "Eth 1/1";
+    let switch_id = "JPE123";
+    let segment_id = "USER:VLAN100";
+    let resp_text = format!(
+        "Wall jack: {} is connected to port {} on switch {} and is in segement ID {}",
+        walljack, switchport, switch_id, segment_id
+    );
+    let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
+    let blocks = vec![block2];
+    let payload = BlockPayload::new(blocks);
+    slack.send_response(envelope_id, payload);
+}
+
+fn port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
+    let placeholder = TextBlock::new_plain("placeholder".to_string());
+    let option1 = OptionObject::new(
+        TextBlock::new_plain("this is plain".to_string()),
+        "value-0".to_string(),
+    );
+    let accessory = StaticSelect::new(placeholder, "action123".to_string(), vec![option1]);
+    let first = format!("Choose a segment for walljack: {}", text);
+    let mut block1 = Block::new_section(TextBlock::new_mrkdwn(first));
+    block1.add_accessory(accessory);
+    let blocks = vec![block1];
+    let payload = BlockPayload::new(blocks);
+    slack.send_response(envelope_id, payload);
 }

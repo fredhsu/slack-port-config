@@ -30,7 +30,46 @@ pub enum SocketEvent {
         envelope_id: String,
         accepts_response_payload: bool,
     },
-    // TODO: Add interactive
+    #[serde(rename = "interactive")]
+    Interactive {
+        payload: Interactive,
+        envelope_id: String,
+        accepts_response_payload: bool,
+    },
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct MessagePayload {
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocks: Option<Vec<Block>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_ts: Option<String>,
+    pub mrkdwn: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Interactive {
+    #[serde(rename = "type")]
+    interactive_type: String,
+    pub actions: Vec<InteractiveAction>,
+    pub response_url: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct InteractiveAction {
+    #[serde(rename = "type")]
+    action_type: String,
+    action_id: String,
+    block_id: String,
+    action_ts: String,
+    pub selected_option: SelectedOption,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SelectedOption {
+    pub text: TextBlock,
+    pub value: String,
 }
 #[derive(Deserialize, Debug)]
 pub struct AppMention {
@@ -115,6 +154,14 @@ impl Client {
             .write_message(Message::Text(msg.into()))
             .unwrap();
     }
+    pub fn send_response(&mut self, envelope_id: &str, payload: BlockPayload) {
+        let response = Response {
+            envelope_id: envelope_id.to_string(),
+            payload,
+        };
+        let response_json = serde_json::to_string(&response).unwrap();
+        self.send_message(&response_json);
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -132,6 +179,15 @@ pub struct SlashCommand {
     is_enterprise_install: String,
     response_url: String,
     trigger_id: String,
+}
+
+impl SlashCommand {
+    pub fn get_command(&self) -> String {
+        match self.command.strip_prefix("/") {
+            Some(s) => s.to_string(),
+            None => "".to_string(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -155,9 +211,9 @@ pub struct Block {
     #[serde(rename = "type")]
     block_type: String,
     text: TextBlock,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     fields: Option<Vec<TextBlock>>,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     accessory: Option<StaticSelect>,
 }
 impl Block {
@@ -182,11 +238,11 @@ pub struct StaticSelect {
     placeholder: TextBlock,
     action_id: String,
     options: Vec<OptionObject>,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     option_groups: Option<Vec<OptionObject>>,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     initial_option: Option<OptionObject>,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     confirm: Option<ConfirmObject>,
     focus_on_load: bool,
 }
@@ -210,14 +266,15 @@ pub struct ConfirmObject {}
 pub struct OptionObject {
     text: TextBlock,
     value: String,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
-   #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<String>,
 }
+
 impl OptionObject {
     pub fn new(text: TextBlock, value: String) -> Self {
-        OptionObject{
+        OptionObject {
             text,
             value,
             description: None,
@@ -230,7 +287,7 @@ impl OptionObject {
 pub struct TextBlock {
     #[serde(rename = "type")]
     text_type: String,
-    text: String,
+    pub text: String,
 }
 impl TextBlock {
     pub fn new_plain(text: String) -> TextBlock {
