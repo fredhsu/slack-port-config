@@ -12,7 +12,12 @@ pub struct Host {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TokenResponse {
-    token: String,
+    cookie: CookieResponse,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CookieResponse {
+    #[serde(rename="Value")]
+    value: String,
 }
 
 impl Host {
@@ -37,7 +42,9 @@ impl Host {
     pub async fn get_token_from_auth(&mut self) -> Result<(), reqwest::Error> {
         let path = "/cvpservice/login/authenticate.do";
         let url = format!("https://{}:{}{}", self.hostname, self.port, path);
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()?;
         let response = client
             .post(url)
             .basic_auth(&self.username, Some(&self.password))
@@ -45,14 +52,18 @@ impl Host {
             .await?
             .json::<TokenResponse>()
             .await?;
-        self.token = Some(response.token);
+        self.token = Some(response.cookie.value);
+        println!("token is {:?}", &self.token);
+
         Ok(())
     }
 
     async fn get(&self, path: &str) -> Result<String, reqwest::Error> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
-            let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()?;
             let response = client
                 .get(url)
                 .header(ACCEPT, "application/json")
@@ -70,7 +81,9 @@ impl Host {
     async fn post(&self, path: &str) -> Result<String, reqwest::Error> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
-            let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()?;
             let response = client
                 .post(url)
                 .header(ACCEPT, "application/json")
