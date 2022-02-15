@@ -106,17 +106,24 @@ async fn get_channels(base_url: String, oauth_token: &str) -> Result<(), reqwest
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
+    // let mut cv = cvp::Host::new(
+    //     "www.cv-staging.corp.arista.io",
+    //     443,
+    //     "fredlhsu@arista.com",
+    //     "arista",
+    // );
     let mut cv = cvp::Host::new(
-        "www.cv-staging.corp.arista.io",
+        "10.90.226.175",
         443,
-        "fredlhsu@arista.com",
-        "arista",
+        "cvpadmin",
+        "arista123!",
     );
-    cv.get_token_from_file("tokens/token.txt".to_string())
-        .unwrap();
-    // let inventory = cv.get_all_devices().await?;
-    // println!("Getting Inventory");
-    // println!("{}", inventory);
+    // cv.get_token_from_file("tokens/token.txt".to_string())
+    //     .unwrap();
+    cv.get_token_from_auth().await.unwrap();
+    let inventory = cv.get_all_devices().await?;
+    println!("Getting Inventory");
+    println!("{}", inventory);
     // let device = cv.get_device("F799ECF9B7DA78B0BC849B972D16E373").await?;
     // println!("device: {:?}", device);
     let tags = cv.get_tags().await?;
