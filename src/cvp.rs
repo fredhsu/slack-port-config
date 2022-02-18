@@ -1,6 +1,8 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, collections::HashMap};
+use uuid::Uuid;
+use chrono::prelude::*;
 
 pub struct Host {
     hostname: String,
@@ -85,6 +87,79 @@ pub struct DeviceKey {
     pub device_id: String,
 }
 
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ChangeAction {
+    change: Change,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Change{
+    pub config: ChangeConfig,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ChangeConfig {
+    pub id: String,
+    pub name: String,
+    pub root_stage: RootStage,
+}
+impl ChangeConfig {
+    pub fn new(name: String, root_stage: RootStage) -> Self {
+        let id = Uuid::new_v4().to_string();
+        ChangeConfig {        
+            id, name, root_stage }
+    }
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RootStage {
+    id: String,
+    name: String,
+    stage_row: Vec<StageRow>,
+}
+impl RootStage {
+    pub fn new(name: String, stage_row: Vec<StageRow>) -> Self {
+        let id = Uuid::new_v4().to_string();
+        RootStage {        
+            id, name, stage_row }
+    }
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StageRow {
+    pub stage: Vec<Stage>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Stage {
+    id: String,
+    name: String,
+    action: Action,
+}
+impl Stage {
+    pub fn new(name: String, action: Action) -> Self {
+        let id = Uuid::new_v4().to_string();
+        Stage {
+            id,
+            name,
+            action,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Action {
+    pub name: String,
+    pub args: HashMap<String,String>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Approval {
+    pub cc_id: String,
+    pub cc_timestamp: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StartChange {
+    pub cc_id: String,
+}
 
 impl Host {
     pub fn new(hostname: &str, port: u32, username: &str, password: &str) -> Self {
@@ -198,6 +273,23 @@ impl Host {
             device_id
         );
         self.get(&path).await
+    }
+    pub async fn post_change_control(&self, change: String) -> Result<String, reqwest::Error>{
+        let path = "/api/v3/services/ccapi.ChangeControl/Update".to_string();
+        self.post(&path, change).await
+    }
+
+    pub async fn approve_change_control(&self, approval: Approval) -> Result<String, reqwest::Error>{
+let approval_json = serde_json::to_string(&approval).unwrap();
+        let path = "/api/v3/services/ccapi.ChangeControl/AddApproval".to_string();
+        println!("Approving: {}", &approval_json);
+        self.post(&path, approval_json).await
+    }
+    pub async fn execute_change_control(&self, start: StartChange) -> Result<String, reqwest::Error>{
+let start_json = serde_json::to_string(&start).unwrap();
+        println!("Starting: {}", &start_json);
+        let path = "/api/v3/services/ccapi.ChangeControl/Start".to_string();
+        self.post(&path, start_json).await
     }
 }
 

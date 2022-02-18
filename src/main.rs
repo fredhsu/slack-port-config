@@ -1,7 +1,13 @@
+use std::{ops::Add, collections::HashMap};
+
+use cvp::{RootStage, StageRow, Stage, Action, ChangeConfig, Change, Approval};
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use slack::*;
 use tungstenite::Message;
+use chrono::prelude::*;
+
+use crate::cvp::StartChange;
 mod cvp;
 mod slack;
 
@@ -109,7 +115,7 @@ async fn get_tags(cv: &cvp::Host) -> Result<(), reqwest::Error>{
     println!("Tags: {}", tags);
     Ok(())
 }
-async fn get_tag_assignment(cv: &cvp::Host, label: String, value: String) -> Result<String, reqwest::Error>{
+async fn get_tag_assignment(cv: &cvp::Host, label: String, value: String) -> Result<Vec<cvp::InterfaceResponse>, reqwest::Error>{
     /*
     workspace_id: "",
     element_type: ELEMENT_TYPE_INTERFACE,
@@ -131,7 +137,9 @@ where   BB        = two letter building code
         let data = cvp::PartialEqFilter {
             partial_eq_filter: vec![filter],
         };
-    cv.get_tag_assignment(data).await
+    let device_json = cv.get_tag_assignment(data).await.unwrap();
+    // let device : Vec<cvp::InterfaceResponse> = serde_json::from_str(&device_json).unwrap();
+    Ok(serde_json::from_str(&device_json).unwrap())
 }
 
 async fn get_inventory(cv: &cvp::Host)-> Result<(), reqwest::Error> {
@@ -147,6 +155,10 @@ async fn get_device(cv: &cvp::Host)-> Result<(), reqwest::Error> {
     Ok(())
 }
 
+async fn shut_interface(cv: &cvp::Host) -> Result<(), reqwest::Error> {
+
+    Ok(())
+}
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     let mut cv = cvp::Host::new(
@@ -163,14 +175,12 @@ async fn main() -> Result<(), reqwest::Error> {
     // );
     cv.get_token_from_file("tokens/token.txt".to_string())
         .unwrap();
-    // cv.get_token_from_auth().await.unwrap();
-    // get_tag_assignment(&cv, "wall_jack".to_string(), "sjc1-401-019-1".to_string()).await.unwrap();
-    // get_device(&cv).await.unwrap();
 
-
+        let device = "SSJ17200818".to_string();
+        let interface = "Ethernet1".to_string();
+    execute_change_action(&cv, device, interface).await;
     let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
     let mut slack = slack::Client::new(slack_token);
-    // let wss_url = slack.get_wss_url().await.unwrap();
 
     slack.connect().await.unwrap();
     loop {
@@ -187,9 +197,7 @@ async fn main() -> Result<(), reqwest::Error> {
 }
 
 async fn handle_text(cv: &cvp::Host, t: &str, slack: &mut slack::Client) {
-    // println!("*** Incoming text *** \n {:?}", t);
     let socket_event = slack::parse_message(t);
-    println!("{:?}", &socket_event);
     match socket_event {
         slack::SocketEvent::EventsApi {
             payload,
@@ -203,7 +211,6 @@ async fn handle_text(cv: &cvp::Host, t: &str, slack: &mut slack::Client) {
             envelope_id,
             accepts_response_payload,
         } => {
-            println!("Received slash command: {:?}", payload);
             handle_slash_command(cv, slack, payload, envelope_id).await;
         }
         slack::SocketEvent::Interactive {
@@ -212,14 +219,13 @@ async fn handle_text(cv: &cvp::Host, t: &str, slack: &mut slack::Client) {
             accepts_response_payload,
         } => {
             println!("Received interactive: {:?}", payload);
-            handle_interactive(slack, payload).await;
+            handle_interactive(payload).await;
             println!("response sent");
         }
     }
 }
 
 async fn handle_interactive(
-    slack: &mut slack::Client,
     payload: slack::Interactive,
 ) {
     println!("Received interactive with actions {:?}", payload.actions);
@@ -270,9 +276,8 @@ async fn handle_slash_command(
 }
 
 async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
-    let device_json = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string()).await.unwrap();
-    println!("devicejson: {}", device_json);
-    let device : Vec<cvp::InterfaceResponse> = serde_json::from_str(&device_json).unwrap();
+    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string()).await.unwrap();
+    // println!("devicejson: {}", device_json);
     let first_device = &device.first().unwrap().value.key;
     println!("portcheck device: {}", &first_device.device_id);
     // let resp_text = format!(
@@ -301,4 +306,45 @@ fn port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
     let blocks = vec![block1];
     let payload = BlockPayload::new(blocks);
     slack.send_response(envelope_id, payload);
+}
+
+async fn execute_change_action(cv: &cvp::Host, device:String, interface: String) {
+    // Build the action
+    let change = build_change_action(device, interface);
+    let change_json = serde_json::to_string(&change).unwrap();
+    cv.post_change_control(change_json).await.unwrap();
+    // Approve the change
+    let cc_timestamp= format!("{:?}", Utc::now());
+    let cc_id = change.config.id;
+    let approval = Approval {
+        cc_id: cc_id.clone(),
+        cc_timestamp,
+    };
+    let response = cv.approve_change_control(approval).await.unwrap();
+    println!("approval response: {}", response);
+    let start= StartChange {
+        cc_id: cc_id.clone(),
+    };
+    // Execute the change
+    // cv.execute_change_control(start).await.unwrap();
+
+}
+
+fn build_change_action(device: String, interface: String) -> Change {
+    let utc= Utc::now().format("%y-%m-%d-%H-%M-%S").to_string();
+    let mut args = HashMap::new();
+    args.insert("DeviceID".to_string(), device);
+    args.insert("interface".to_string(), interface);
+    let action = Action{
+        name: "ps5pMVndlXpK6IsQJGr7U".to_string(),
+        args,
+    };
+    let stage = Stage::new("shut_interface".to_string(), action);
+    let stages = vec![stage];
+    let stage_row = StageRow{
+        stage: stages};
+    let stage_rows = vec![stage_row];
+    let root_stage = RootStage::new(format!("Change {} root", utc), stage_rows);
+    let config = ChangeConfig::new(format!("Change {}", utc), root_stage);
+    Change {config}
 }
