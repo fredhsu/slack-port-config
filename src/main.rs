@@ -295,12 +295,6 @@ async fn port_shut(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
     } else {
         resp_text = "Wall jack number was not found".to_string();
     }
-    // let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
-    //     .await
-    //     .unwrap();
-    // let first_device = &device.first().unwrap().value.key;
-    // execute_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
-    // let resp_text = format!("Wall jack: {} has been shut down", walljack);
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
@@ -312,18 +306,31 @@ async fn port_no_shut(
     envelope_id: &str,
     slack: &mut slack::Client,
 ) {
+    // TODO: pass function such as execute_no_shut_action as a functino parameter to a 
+    // function that will generate response and execute action
+    let mut resp_text = "".to_string();
     let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
-    let first_device = &device.first().unwrap().value.key;
-    execute_no_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
-    let resp_text = format!("Wall jack: {} has been enabled", walljack);
+    if let Some(first_device) = device.first() {
+    resp_text = format!("Wall jack: {} has been enabled", walljack);
+    execute_no_shut_action(cv, &first_device.value.key.device_id, &first_device.value.key.interface_id).await;
+    } else {
+        resp_text = "Wall jack number was not found".to_string();
+    }
+    // let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+    //     .await
+    //     .unwrap();
+    // let first_device = &device.first().unwrap().value.key;
+    // execute_no_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
+    // let resp_text = format!("Wall jack: {} has been enabled", walljack);
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
     slack.send_response(envelope_id, payload);
 }
 
+// TODO: Not yet implemented
 fn port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
     let placeholder = TextBlock::new_plain("segment".to_string());
     let option1 = OptionObject::new(
