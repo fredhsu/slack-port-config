@@ -1,11 +1,11 @@
-use std::{ops::Add, collections::HashMap};
+use std::{collections::HashMap, ops::Add};
 
-use cvp::{RootStage, StageRow, Stage, Action, ChangeConfig, Change, Approval};
+use chrono::prelude::*;
+use cvp::{Action, Approval, Change, ChangeConfig, RootStage, Stage, StageRow};
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use slack::*;
 use tungstenite::Message;
-use chrono::prelude::*;
 
 use crate::cvp::StartChange;
 mod cvp;
@@ -110,53 +110,51 @@ async fn get_channels(base_url: String, oauth_token: &str) -> Result<(), reqwest
     Ok(())
 }
 
-async fn get_tags(cv: &cvp::Host) -> Result<(), reqwest::Error>{
+async fn get_tags(cv: &cvp::Host) -> Result<(), reqwest::Error> {
     let tags = cv.get_tags().await?;
     println!("Tags: {}", tags);
     Ok(())
 }
-async fn get_tag_assignment(cv: &cvp::Host, label: String, value: String) -> Result<Vec<cvp::InterfaceResponse>, reqwest::Error>{
+async fn get_tag_assignment(
+    cv: &cvp::Host,
+    label: String,
+    value: String,
+) -> Result<Vec<cvp::InterfaceResponse>, reqwest::Error> {
     /*
     workspace_id: "",
     element_type: ELEMENT_TYPE_INTERFACE,
     label: "wall_jack",
     value: "sjc1-401-019-1",
     */
-    /* Jack numbering
-    Jack number format:  BBf-rrr-ppp-j
-where   BB        = two letter building code
-            f           = floor number
-            rr        = room number
-            pp      = plate number
-            j           = number of jack on that plate
-            */
-        let workspace_key = cvp::TagKey { workspace_id: "".to_string(), element_type: Some("ELEMENT_TYPE_INTERFACE".to_string()), label: Some(label.to_string()), value: Some(value.to_string()) };
-        let filter = cvp::Tag {
-            key: workspace_key,
-        };
-        let data = cvp::PartialEqFilter {
-            partial_eq_filter: vec![filter],
-        };
+    let workspace_key = cvp::TagKey {
+        workspace_id: "".to_string(),
+        element_type: Some("ELEMENT_TYPE_INTERFACE".to_string()),
+        label: Some(label.to_string()),
+        value: Some(value.to_string()),
+    };
+    let filter = cvp::Tag { key: workspace_key };
+    let data = cvp::PartialEqFilter {
+        partial_eq_filter: vec![filter],
+    };
     let device_json = cv.get_tag_assignment(data).await.unwrap();
-    // let device : Vec<cvp::InterfaceResponse> = serde_json::from_str(&device_json).unwrap();
-    Ok(serde_json::from_str(&device_json).unwrap())
+    let assignment = serde_json::from_str(&device_json).unwrap_or(Vec::new());
+    Ok(assignment)
 }
 
-async fn get_inventory(cv: &cvp::Host)-> Result<(), reqwest::Error> {
+async fn get_inventory(cv: &cvp::Host) -> Result<(), reqwest::Error> {
     let inventory = cv.get_all_devices().await?;
     println!("Getting Inventory");
     println!("{}", inventory);
     Ok(())
 }
 
-async fn get_device(cv: &cvp::Host)-> Result<(), reqwest::Error> {
+async fn get_device(cv: &cvp::Host) -> Result<(), reqwest::Error> {
     let device = cv.get_device("JPE12233288").await?;
     println!("device: {:?}", device);
     Ok(())
 }
 
 async fn shut_interface(cv: &cvp::Host) -> Result<(), reqwest::Error> {
-
     Ok(())
 }
 #[tokio::main]
@@ -176,9 +174,9 @@ async fn main() -> Result<(), reqwest::Error> {
     cv.get_token_from_file("tokens/token.txt".to_string())
         .unwrap();
 
-        let device = "SSJ17200818".to_string();
-        let interface = "Ethernet1".to_string();
-    execute_change_action(&cv, device, interface).await;
+    // let device = "SSJ17200818";
+    // let interface = "Ethernet1";
+    // execute_shut_action(&cv, device, interface).await;
     let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
     let mut slack = slack::Client::new(slack_token);
 
@@ -188,8 +186,8 @@ async fn main() -> Result<(), reqwest::Error> {
         match msg {
             Message::Text(t) => handle_text(&cv, &t, &mut slack).await,
             Message::Binary(_) => println!("binary"),
-            Message::Ping(p) => {},
-            Message::Pong(p) => {},
+            Message::Ping(p) => {}
+            Message::Pong(p) => {}
             Message::Close(_) => break,
         }
     }
@@ -225,9 +223,7 @@ async fn handle_text(cv: &cvp::Host, t: &str, slack: &mut slack::Client) {
     }
 }
 
-async fn handle_interactive(
-    payload: slack::Interactive,
-) {
+async fn handle_interactive(payload: slack::Interactive) {
     println!("Received interactive with actions {:?}", payload.actions);
     let text = format!(
         "Updated with segement ID {}",
@@ -249,15 +245,11 @@ async fn handle_interactive(
         .send()
         .await
         .unwrap();
-        //TODO remove semicolon and make this return value
+    //TODO remove semicolon and make this return value
 }
 
-// logic for different slash commands
-// /portinfo walljack #
-// /portassign walljack - trigger static select
-// sends notification to channel with @ of admins
-// /portdown walljack
-// /portup walljack
+// Matches possible slash commands
+// TODO: use an enum for commands
 async fn handle_slash_command(
     cv: &cvp::Host,
     slack: &mut slack::Client,
@@ -265,28 +257,65 @@ async fn handle_slash_command(
     envelope_id: String,
 ) {
     let command = &payload.get_command();
-    println!("Command is: {}", &command);
     match command.as_str() {
         "portcheck" => portcheck(cv, &payload.text, &envelope_id, slack).await,
-        "portassign" => port_assign(&payload.text, &envelope_id, slack),
-        "portdown" => println!("Shutting down port {}", &payload.text),
-        "portup" => println!("Bringing port {} up", &payload.text),
-        _ => println!("Unknown command"),
+        "portdown" => port_shut(cv, &payload.text, &envelope_id, slack).await,
+        "portup" => port_no_shut(cv, &payload.text, &envelope_id, slack).await,
+        "portassign" => println!("Assign port {} ", &payload.text),
+        _ => println!("Unknown command {}", command),
     }
 }
 
 async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
-    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string()).await.unwrap();
+    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+        .await
+        .unwrap();
     // println!("devicejson: {}", device_json);
-    let first_device = &device.first().unwrap().value.key;
-    println!("portcheck device: {}", &first_device.device_id);
+    let mut resp_text = "".to_string();
+    if let Some(first_device) = device.first() {
+        resp_text = format!(
+            "Wall jack: {} is connected to port {} on switch {}",
+            walljack, &first_device.value.key.interface_id, &first_device.value.key.device_id
+        );
+    } else {
+        resp_text = "Wall jack number was not found".to_string();
+    }
+    // let first_device = &device.first().unwrap().value.key;
+    // println!("portcheck device: {}", &first_device.device_id);
     // let resp_text = format!(
-    //     "Wall jack: {} is connected to port {} on switch {} and is in segement ID {}",
-    //     walljack, &first_device.interface_id, &first_device.device_id, segment_id
+    //     "Wall jack: {} is connected to port {} on switch {}",
+    //     walljack, &first_device.interface_id, &first_device.device_id
     // );
-    let resp_text = format!(
-        "Wall jack: {} is connected to port {} on switch {}",
-        walljack, &first_device.interface_id, &first_device.device_id);
+    let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
+    let blocks = vec![block2];
+    let payload = BlockPayload::new(blocks);
+    slack.send_response(envelope_id, payload);
+}
+
+async fn port_shut(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
+    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+        .await
+        .unwrap();
+    let first_device = &device.first().unwrap().value.key;
+    execute_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
+    let resp_text = format!("Wall jack: {} has been shut down", walljack);
+    let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
+    let blocks = vec![block2];
+    let payload = BlockPayload::new(blocks);
+    slack.send_response(envelope_id, payload);
+}
+async fn port_no_shut(
+    cv: &cvp::Host,
+    walljack: &str,
+    envelope_id: &str,
+    slack: &mut slack::Client,
+) {
+    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+        .await
+        .unwrap();
+    let first_device = &device.first().unwrap().value.key;
+    execute_no_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
+    let resp_text = format!("Wall jack: {} has been enabled", walljack);
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
@@ -308,13 +337,15 @@ fn port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
     slack.send_response(envelope_id, payload);
 }
 
-async fn execute_change_action(cv: &cvp::Host, device:String, interface: String) {
+async fn execute_shut_action(cv: &cvp::Host, device: &str, interface: &str) {
     // Build the action
-    let change = build_change_action(device, interface);
+    let change = build_shut_action(device.to_string(), interface.to_string());
     let change_json = serde_json::to_string(&change).unwrap();
-    cv.post_change_control(change_json).await.unwrap();
+    let cc_res = cv.post_change_control(change_json).await.unwrap();
+    println!("post_change_control result: {}", cc_res);
+
     // Approve the change
-    let cc_timestamp= format!("{:?}", Utc::now());
+    let cc_timestamp = format!("{:?}", Utc::now());
     let cc_id = change.config.id;
     let approval = Approval {
         cc_id: cc_id.clone(),
@@ -322,29 +353,106 @@ async fn execute_change_action(cv: &cvp::Host, device:String, interface: String)
     };
     let response = cv.approve_change_control(approval).await.unwrap();
     println!("approval response: {}", response);
-    let start= StartChange {
+    let start = StartChange {
         cc_id: cc_id.clone(),
     };
     // Execute the change
-    // cv.execute_change_control(start).await.unwrap();
+    cv.execute_change_control(start).await.unwrap();
+}
+async fn execute_no_shut_action(cv: &cvp::Host, device: &str, interface: &str) {
+    // Build the action
+    let change = build_no_shut_action(device.to_string(), interface.to_string());
+    let change_json = serde_json::to_string(&change).unwrap();
+    let cc_res = cv.post_change_control(change_json).await.unwrap();
+    println!("post_change_control result: {}", cc_res);
 
+    // Approve the change
+    let cc_timestamp = format!("{:?}", Utc::now());
+    let cc_id = change.config.id;
+    let approval = Approval {
+        cc_id: cc_id.clone(),
+        cc_timestamp,
+    };
+    let response = cv.approve_change_control(approval).await.unwrap();
+    println!("approval response: {}", response);
+    let start = StartChange {
+        cc_id: cc_id.clone(),
+    };
+    // Execute the change
+    cv.execute_change_control(start).await.unwrap();
 }
 
-fn build_change_action(device: String, interface: String) -> Change {
-    let utc= Utc::now().format("%y-%m-%d-%H-%M-%S").to_string();
+fn build_no_shut_action(device: String, interface: String) -> Change {
     let mut args = HashMap::new();
     args.insert("DeviceID".to_string(), device);
     args.insert("interface".to_string(), interface);
-    let action = Action{
+    let action_name = "rfzsJdsdQEU9EOlPeNeAL".to_string();
+    let stage_name = "no_shut_interface".to_string();
+    build_action_change(action_name, stage_name, args)
+}
+
+fn build_shut_action(device: String, interface: String) -> Change {
+    let utc = Utc::now().format("%y-%m-%d-%H-%M-%S").to_string();
+    let mut args = HashMap::new();
+    args.insert("DeviceID".to_string(), device);
+    args.insert("interface".to_string(), interface);
+    // TODO: put action name and id into config struct
+    let action = Action {
         name: "ps5pMVndlXpK6IsQJGr7U".to_string(),
         args,
     };
     let stage = Stage::new("shut_interface".to_string(), action);
     let stages = vec![stage];
-    let stage_row = StageRow{
-        stage: stages};
+    let stage_row = StageRow { stage: stages };
     let stage_rows = vec![stage_row];
     let root_stage = RootStage::new(format!("Change {} root", utc), stage_rows);
     let config = ChangeConfig::new(format!("Change {}", utc), root_stage);
-    Change {config}
+    Change { config }
+}
+
+fn build_action_change(
+    action_name: String,
+    stage_name: String,
+    args: HashMap<String, String>,
+) -> Change {
+    let utc = Utc::now().format("%y-%m-%d-%H-%M-%S").to_string();
+    let action = Action {
+        name: action_name,
+        args,
+    };
+    let stage = Stage::new(stage_name, action);
+    let stages = vec![stage];
+    let stage_row = StageRow { stage: stages };
+    let stage_rows = vec![stage_row];
+    let root_stage = RootStage::new(format!("Change {} root", utc), stage_rows);
+    let config = ChangeConfig::new(format!("Change {}", utc), root_stage);
+    Change { config }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_action_change() {
+        let device = "JPE1999";
+        let interface = "Ethernet1";
+        let action_name = "ps5pMVndlXpK6IsQJGr7U".to_string();
+        let stage_name = "shut_interface".to_string();
+        let mut args = HashMap::new();
+        args.insert("DeviceID".to_string(), device.to_string());
+        args.insert("interface".to_string(), interface.to_string());
+
+        let build_action = build_action_change(action_name, stage_name.clone(), args.clone());
+        let stage = build_action
+            .config
+            .root_stage
+            .stage_row
+            .first()
+            .unwrap()
+            .stage
+            .first()
+            .unwrap();
+        assert_eq!(&stage_name, &stage.name);
+        assert_eq!(&args, &stage.action.args);
+    }
 }

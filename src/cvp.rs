@@ -1,8 +1,8 @@
+use chrono::prelude::*;
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
-use std::{fs, collections::HashMap};
+use std::{collections::HashMap, fs};
 use uuid::Uuid;
-use chrono::prelude::*;
 
 pub struct Host {
     hostname: String,
@@ -18,7 +18,7 @@ pub struct TokenResponse {
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CookieResponse {
-    #[serde(rename="Value")]
+    #[serde(rename = "Value")]
     value: String,
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -38,12 +38,12 @@ pub struct TagKey {
     pub value: Option<String>,
 }
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all="SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ElementType {
     ElementTypeUnspecified,
     ElementTypeDevice,
     ElementTypeInterface,
-} 
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InterfaceQueryResponse {
@@ -56,37 +56,36 @@ pub struct InterfaceResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Interface {
-    pub key:InterfaceKey, 
+    pub key: InterfaceKey,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InterfaceKey {
-    pub workspace_id:String, 
-    pub element_type:String, 
-    pub label:String, 
-    pub value:String, 
-    pub device_id:String, 
-    pub interface_id:String, 
+    pub workspace_id: String,
+    pub element_type: String,
+    pub label: String,
+    pub value: String,
+    pub device_id: String,
+    pub interface_id: String,
 }
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Device {
-    pub key:DeviceKey, 
-    pub software_version:String, 
-    pub model_name:String, 
-    pub hardware_revision:String, 
-    pub fqdn:String, 
-    pub hostname:String, 
-    pub domain_name:String, 
-    pub system_mac_address:String, 
-    pub boot_time:String, 
-    pub streaming_status:String, 
+    pub key: DeviceKey,
+    pub software_version: String,
+    pub model_name: String,
+    pub hardware_revision: String,
+    pub fqdn: String,
+    pub hostname: String,
+    pub domain_name: String,
+    pub system_mac_address: String,
+    pub boot_time: String,
+    pub streaming_status: String,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DeviceKey {
-    #[serde(rename="deviceId")]
+    #[serde(rename = "deviceId")]
     pub device_id: String,
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChangeAction {
@@ -94,7 +93,7 @@ pub struct ChangeAction {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Change{
+pub struct Change {
     pub config: ChangeConfig,
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -106,21 +105,27 @@ pub struct ChangeConfig {
 impl ChangeConfig {
     pub fn new(name: String, root_stage: RootStage) -> Self {
         let id = Uuid::new_v4().to_string();
-        ChangeConfig {        
-            id, name, root_stage }
+        ChangeConfig {
+            id,
+            name,
+            root_stage,
+        }
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RootStage {
-    id: String,
-    name: String,
-    stage_row: Vec<StageRow>,
+    pub id: String,
+    pub name: String,
+    pub stage_row: Vec<StageRow>,
 }
 impl RootStage {
     pub fn new(name: String, stage_row: Vec<StageRow>) -> Self {
         let id = Uuid::new_v4().to_string();
-        RootStage {        
-            id, name, stage_row }
+        RootStage {
+            id,
+            name,
+            stage_row,
+        }
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -130,25 +135,21 @@ pub struct StageRow {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Stage {
-    id: String,
-    name: String,
-    action: Action,
+    pub id: String,
+    pub name: String,
+    pub action: Action,
 }
 impl Stage {
     pub fn new(name: String, action: Action) -> Self {
         let id = Uuid::new_v4().to_string();
-        Stage {
-            id,
-            name,
-            action,
-        }
+        Stage { id, name, action }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Action {
     pub name: String,
-    pub args: HashMap<String,String>,
+    pub args: HashMap<String, String>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Approval {
@@ -202,9 +203,9 @@ impl Host {
     async fn get(&self, path: &str) -> Result<String, reqwest::Error> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()?;
+            let client = reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .build()?;
             let response = client
                 .get(url)
                 .header(ACCEPT, "application/json")
@@ -222,9 +223,9 @@ impl Host {
     async fn post(&self, path: &str, body: String) -> Result<String, reqwest::Error> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()?;
+            let client = reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .build()?;
             let response = client
                 .post(url)
                 .header(ACCEPT, "application/json")
@@ -244,17 +245,23 @@ impl Host {
         let path = "/api/resources/tag/v2/Tag/all";
         // TODO: replace this with the url above when cvaas is fixed
         // let path = "/api/v3/services/arista.tag.v2.Tag/GetAll";
-        let workspace_key = TagKey { workspace_id: "".to_string(), element_type: None, label: None, value: None };
-        let filter = Tag {
-            key: workspace_key,
+        let workspace_key = TagKey {
+            workspace_id: "".to_string(),
+            element_type: None,
+            label: None,
+            value: None,
         };
+        let filter = Tag { key: workspace_key };
         let data = PartialEqFilter {
             partial_eq_filter: vec![filter],
         };
         let json_data = serde_json::to_string(&data).unwrap();
         self.post(path, json_data).await
     }
-    pub async fn get_tag_assignment(&self, partial_eq_filter: PartialEqFilter) -> Result<String, reqwest::Error> {
+    pub async fn get_tag_assignment(
+        &self,
+        partial_eq_filter: PartialEqFilter,
+    ) -> Result<String, reqwest::Error> {
         // let path = "/api/resources/tag/v2/TagAssignment/all";
         // TODO: replace this with the url above when cvaas is fixed
         let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
@@ -274,19 +281,25 @@ impl Host {
         );
         self.get(&path).await
     }
-    pub async fn post_change_control(&self, change: String) -> Result<String, reqwest::Error>{
+    pub async fn post_change_control(&self, change: String) -> Result<String, reqwest::Error> {
         let path = "/api/v3/services/ccapi.ChangeControl/Update".to_string();
         self.post(&path, change).await
     }
 
-    pub async fn approve_change_control(&self, approval: Approval) -> Result<String, reqwest::Error>{
-let approval_json = serde_json::to_string(&approval).unwrap();
+    pub async fn approve_change_control(
+        &self,
+        approval: Approval,
+    ) -> Result<String, reqwest::Error> {
+        let approval_json = serde_json::to_string(&approval).unwrap();
         let path = "/api/v3/services/ccapi.ChangeControl/AddApproval".to_string();
         println!("Approving: {}", &approval_json);
         self.post(&path, approval_json).await
     }
-    pub async fn execute_change_control(&self, start: StartChange) -> Result<String, reqwest::Error>{
-let start_json = serde_json::to_string(&start).unwrap();
+    pub async fn execute_change_control(
+        &self,
+        start: StartChange,
+    ) -> Result<String, reqwest::Error> {
+        let start_json = serde_json::to_string(&start).unwrap();
         println!("Starting: {}", &start_json);
         let path = "/api/v3/services/ccapi.ChangeControl/Start".to_string();
         self.post(&path, start_json).await
@@ -299,7 +312,8 @@ mod tests {
     #[test]
     fn test_get_token_from_file() {
         let mut cv = Host::new("foo", 443, "user", "pass");
-        cv.get_token_from_file("token.txt".to_string()).unwrap();
+        cv.get_token_from_file("tokens/token.txt".to_string())
+            .unwrap();
         if let Some(token) = cv.token {
             assert!(token.starts_with("ey"));
         } else {
