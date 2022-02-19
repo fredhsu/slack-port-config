@@ -266,7 +266,7 @@ impl Host {
         // TODO: replace this with the url above when cvaas is fixed
         let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
         let json_data = serde_json::to_string(&partial_eq_filter).unwrap();
-        println!("Filter is : {}", json_data);
+        // println!("Filter is : {}", json_data);
         self.post(path, json_data).await
     }
 

@@ -124,7 +124,7 @@ async fn get_tag_assignment(
     workspace_id: "",
     element_type: ELEMENT_TYPE_INTERFACE,
     label: "wall_jack",
-    value: "sjc1-401-019-1",
+    value: "sjc1-04-1",
     */
     let workspace_key = cvp::TagKey {
         workspace_id: "".to_string(),
@@ -136,7 +136,8 @@ async fn get_tag_assignment(
     let data = cvp::PartialEqFilter {
         partial_eq_filter: vec![filter],
     };
-    let device_json = cv.get_tag_assignment(data).await.unwrap();
+    let device_json = cv.get_tag_assignment(data).await?;
+    // TODO: Better error handling here, should we return an error if there is no assignment?
     let assignment = serde_json::from_str(&device_json).unwrap_or(Vec::new());
     Ok(assignment)
 }
@@ -154,9 +155,6 @@ async fn get_device(cv: &cvp::Host) -> Result<(), reqwest::Error> {
     Ok(())
 }
 
-async fn shut_interface(cv: &cvp::Host) -> Result<(), reqwest::Error> {
-    Ok(())
-}
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     let mut cv = cvp::Host::new(
@@ -280,12 +278,6 @@ async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
     } else {
         resp_text = "Wall jack number was not found".to_string();
     }
-    // let first_device = &device.first().unwrap().value.key;
-    // println!("portcheck device: {}", &first_device.device_id);
-    // let resp_text = format!(
-    //     "Wall jack: {} is connected to port {} on switch {}",
-    //     walljack, &first_device.interface_id, &first_device.device_id
-    // );
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
@@ -293,12 +285,22 @@ async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
 }
 
 async fn port_shut(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
+    let mut resp_text = "".to_string();
     let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
-    let first_device = &device.first().unwrap().value.key;
-    execute_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
-    let resp_text = format!("Wall jack: {} has been shut down", walljack);
+    if let Some(first_device) = device.first() {
+    resp_text = format!("Wall jack: {} has been shut down", walljack);
+    execute_shut_action(cv, &first_device.value.key.device_id, &first_device.value.key.interface_id).await;
+    } else {
+        resp_text = "Wall jack number was not found".to_string();
+    }
+    // let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+    //     .await
+    //     .unwrap();
+    // let first_device = &device.first().unwrap().value.key;
+    // execute_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
+    // let resp_text = format!("Wall jack: {} has been shut down", walljack);
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
