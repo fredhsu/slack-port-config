@@ -2,7 +2,6 @@ use std::{collections::HashMap, ops::Add};
 
 use chrono::prelude::*;
 use cvp::{Action, Approval, Change, ChangeConfig, RootStage, Stage, StageRow};
-use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use slack::*;
 use tungstenite::Message;
@@ -95,26 +94,6 @@ enum EventType {
     EventCallback,
 }
 
-async fn get_channels(base_url: String, oauth_token: &str) -> Result<(), reqwest::Error> {
-    let client = reqwest::Client::new();
-    let conversations_url = format!("{}{}", base_url, "conversations.list");
-
-    let response = client
-        .get(conversations_url)
-        .header(AUTHORIZATION, "Bearer ".to_owned() + oauth_token)
-        .send()
-        .await?
-        .json::<ChannelsResponse>()
-        .await?;
-    println!("body = {:?}", response);
-    Ok(())
-}
-
-async fn get_tags(cv: &cvp::Host) -> Result<(), reqwest::Error> {
-    let tags = cv.get_tags().await?;
-    println!("Tags: {}", tags);
-    Ok(())
-}
 async fn get_tag_assignment(
     cv: &cvp::Host,
     label: String,
@@ -142,16 +121,10 @@ async fn get_tag_assignment(
     Ok(assignment)
 }
 
-async fn get_inventory(cv: &cvp::Host) -> Result<(), reqwest::Error> {
+async fn _get_inventory(cv: &cvp::Host) -> Result<(), reqwest::Error> {
     let inventory = cv.get_all_devices().await?;
     println!("Getting Inventory");
     println!("{}", inventory);
-    Ok(())
-}
-
-async fn get_device(cv: &cvp::Host) -> Result<(), reqwest::Error> {
-    let device = cv.get_device("JPE12233288").await?;
-    println!("device: {:?}", device);
     Ok(())
 }
 
@@ -184,8 +157,8 @@ async fn main() -> Result<(), reqwest::Error> {
         match msg {
             Message::Text(t) => handle_text(&cv, &t, &mut slack).await,
             Message::Binary(_) => println!("binary"),
-            Message::Ping(p) => {}
-            Message::Pong(p) => {}
+            Message::Ping(_p) => {}
+            Message::Pong(_p) => {}
             Message::Close(_) => break,
         }
     }
@@ -197,22 +170,22 @@ async fn handle_text(cv: &cvp::Host, t: &str, slack: &mut slack::Client) {
     match socket_event {
         slack::SocketEvent::EventsApi {
             payload,
-            envelope_id,
-            accepts_response_payload,
+            envelope_id: _,
+            accepts_response_payload: _,
         } => {
             println!("{:?}", payload);
         }
         slack::SocketEvent::SlashCommands {
             payload,
             envelope_id,
-            accepts_response_payload,
+            accepts_response_payload: _,
         } => {
             handle_slash_command(cv, slack, payload, envelope_id).await;
         }
         slack::SocketEvent::Interactive {
             payload,
-            envelope_id,
-            accepts_response_payload,
+            envelope_id: _,
+            accepts_response_payload: _,
         } => {
             println!("Received interactive: {:?}", payload);
             handle_interactive(payload).await;
@@ -268,8 +241,7 @@ async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
     let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
-    // println!("devicejson: {}", device_json);
-    let mut resp_text = "".to_string();
+    let resp_text;
     if let Some(first_device) = device.first() {
         resp_text = format!(
             "Wall jack: {} is connected to port {} on switch {}",
@@ -285,13 +257,18 @@ async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
 }
 
 async fn port_shut(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
-    let mut resp_text = "".to_string();
+    let resp_text;
     let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
     if let Some(first_device) = device.first() {
-    resp_text = format!("Wall jack: {} has been shut down", walljack);
-    execute_shut_action(cv, &first_device.value.key.device_id, &first_device.value.key.interface_id).await;
+        resp_text = format!("Wall jack: {} has been shut down", walljack);
+        execute_shut_action(
+            cv,
+            &first_device.value.key.device_id,
+            &first_device.value.key.interface_id,
+        )
+        .await;
     } else {
         resp_text = "Wall jack number was not found".to_string();
     }
@@ -306,24 +283,23 @@ async fn port_no_shut(
     envelope_id: &str,
     slack: &mut slack::Client,
 ) {
-    // TODO: pass function such as execute_no_shut_action as a functino parameter to a 
+    // TODO: pass function such as execute_no_shut_action as a functino parameter to a
     // function that will generate response and execute action
-    let mut resp_text = "".to_string();
+    let resp_text;
     let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
     if let Some(first_device) = device.first() {
-    resp_text = format!("Wall jack: {} has been enabled", walljack);
-    execute_no_shut_action(cv, &first_device.value.key.device_id, &first_device.value.key.interface_id).await;
+        resp_text = format!("Wall jack: {} has been enabled", walljack);
+        execute_no_shut_action(
+            cv,
+            &first_device.value.key.device_id,
+            &first_device.value.key.interface_id,
+        )
+        .await;
     } else {
         resp_text = "Wall jack number was not found".to_string();
     }
-    // let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
-    //     .await
-    //     .unwrap();
-    // let first_device = &device.first().unwrap().value.key;
-    // execute_no_shut_action(cv, &first_device.device_id, &first_device.interface_id).await;
-    // let resp_text = format!("Wall jack: {} has been enabled", walljack);
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
@@ -331,7 +307,7 @@ async fn port_no_shut(
 }
 
 // TODO: Not yet implemented
-fn port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
+fn _port_assign(text: &str, envelope_id: &str, slack: &mut slack::Client) {
     let placeholder = TextBlock::new_plain("segment".to_string());
     let option1 = OptionObject::new(
         TextBlock::new_plain("USERS:VLAN 100".to_string()),

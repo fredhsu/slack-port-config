@@ -1,4 +1,4 @@
-use chrono::prelude::*;
+//use chrono::prelude::*;
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs};
@@ -200,7 +200,7 @@ impl Host {
         Ok(())
     }
 
-    async fn get(&self, path: &str) -> Result<String, reqwest::Error> {
+    pub async fn get(&self, path: &str) -> Result<String, reqwest::Error> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
             let client = reqwest::Client::builder()
@@ -217,7 +217,7 @@ impl Host {
             Ok(response)
         } else {
             // TODO: use an error to indicate no token
-            Ok("".to_string())
+            Ok("API call needs token first".to_string())
         }
     }
     async fn post(&self, path: &str, body: String) -> Result<String, reqwest::Error> {

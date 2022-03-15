@@ -122,7 +122,7 @@ impl Client {
     }
 
     pub async fn connect(&mut self) -> Result<(), Error> {
-        self.get_wss_url().await;
+        self.get_wss_url().await.unwrap();
         if let Some(url) = &self.wss_url {
             let (mut socket, _response) = connect(url).expect("Can't connect");
             let msg = socket.read_message().expect("Error reading message");
