@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Error, ErrorKind};
 
+use log::{info, warn};
 use std::net::TcpStream;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
@@ -113,7 +114,6 @@ pub struct EventCallback {
 }
 // TODO: make the client specific to WSS either by name of struct or by module
 pub struct Client {
-    //Make option and handle if no token is provided
     token: String,
     socket: Option<tungstenite::WebSocket<MaybeTlsStream<TcpStream>>>,
 }
@@ -152,7 +152,7 @@ impl Client {
         let url = self.get_wss_url().await.expect("Could not get wss url");
         let (mut socket, _response) = connect(url).expect("Can't connect");
         let msg = socket.read_message().expect("Error reading message");
-        println!("recevied hello: {:?}", msg);
+        info!("recevied hello: {:?}", msg);
         self.socket = Some(socket);
         Ok(())
     }
@@ -206,7 +206,7 @@ pub struct SlashCommand {
 
 impl SlashCommand {
     pub fn get_command(&self) -> String {
-        match self.command.strip_prefix("/") {
+        match self.command.strip_prefix('/') {
             Some(s) => s.to_string(),
             None => "".to_string(),
         }
