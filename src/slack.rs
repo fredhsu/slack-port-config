@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Error, ErrorKind};
 
-use log::{info, warn};
+use log::info;
 use std::net::TcpStream;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
@@ -343,9 +343,7 @@ pub fn handle_slash_command(
     };
     let response_json = serde_json::to_string(&response).unwrap();
     println!("send message {}", &response_json);
-    socket
-        .write_message(Message::Text(response_json.into()))
-        .unwrap();
+    socket.write_message(Message::Text(response_json)).unwrap();
 }
 
 pub fn parse_message(s: &str) -> SocketEvent {

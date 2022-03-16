@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Add};
+use std::collections::HashMap;
 
 use chrono::prelude::*;
 use cvp::{Action, Approval, Change, ChangeConfig, RootStage, Stage, StageRow};
@@ -238,7 +238,7 @@ async fn handle_slash_command(
 }
 
 async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
-    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+    let device = get_tag_assignment(cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
     let resp_text;
@@ -258,7 +258,7 @@ async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
 
 async fn port_shut(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mut slack::Client) {
     let resp_text;
-    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+    let device = get_tag_assignment(cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
     if let Some(first_device) = device.first() {
@@ -286,7 +286,7 @@ async fn port_no_shut(
     // TODO: pass function such as execute_no_shut_action as a functino parameter to a
     // function that will generate response and execute action
     let resp_text;
-    let device = get_tag_assignment(&cv, "wall_jack".to_string(), walljack.to_string())
+    let device = get_tag_assignment(cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
     if let Some(first_device) = device.first() {

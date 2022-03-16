@@ -40,9 +40,9 @@ pub struct TagKey {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ElementType {
-    ElementTypeUnspecified,
-    ElementTypeDevice,
-    ElementTypeInterface,
+    Unspecified,
+    Device,
+    Interface,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
