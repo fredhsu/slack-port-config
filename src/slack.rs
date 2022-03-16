@@ -8,10 +8,33 @@ use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message};
 use url::Url;
 
+#[derive(Debug)]
+pub enum SlackErr {
+    Http(reqwest::Error),
+    Parse(url::ParseError),
+    Connection(std::io::Error),
+}
+
+impl From<url::ParseError> for SlackErr {
+    fn from(err: url::ParseError) -> Self {
+        SlackErr::Parse(err)
+    }
+}
+impl From<reqwest::Error> for SlackErr {
+    fn from(err: reqwest::Error) -> Self {
+        SlackErr::Http(err)
+    }
+}
+impl From<std::io::Error> for SlackErr {
+    fn from(err: std::io::Error) -> Self {
+        SlackErr::Connection(err)
+    }
+}
+
 #[derive(Deserialize, Debug)]
 struct AppsConnectionsOpenResponse {
     ok: bool,
-    url: Option<String>,
+    url: String,
     error: Option<String>,
 }
 
@@ -88,10 +111,10 @@ pub struct EventCallback {
     event: AppMention,
     event_id: String,
 }
+// TODO: make the client specific to WSS either by name of struct or by module
 pub struct Client {
     //Make option and handle if no token is provided
     token: String,
-    wss_url: Option<Url>,
     socket: Option<tungstenite::WebSocket<MaybeTlsStream<TcpStream>>>,
 }
 
@@ -99,11 +122,10 @@ impl Client {
     pub fn new(token: String) -> Self {
         Client {
             token,
-            wss_url: None,
             socket: None,
         }
     }
-    pub async fn get_wss_url(&mut self) -> Result<(), reqwest::Error> {
+    async fn get_wss_url(&mut self) -> Result<Url, SlackErr> {
         let base_url = "https://slack.com/api/".to_owned();
         let client = reqwest::Client::new();
         let connection_response = client
@@ -115,23 +137,24 @@ impl Client {
             .json::<AppsConnectionsOpenResponse>()
             .await?;
 
-        let wss_url = connection_response.url.unwrap();
-        let url = Url::parse(&wss_url).unwrap();
-        self.wss_url = Some(url);
-        Ok(())
+        // check if connection was successful
+        if !connection_response.ok {
+            return Err(SlackErr::Connection(Error::new(
+                ErrorKind::Other,
+                connection_response.error.unwrap(),
+            )));
+        }
+        let url = Url::parse(&connection_response.url).expect("Could not parse url");
+        Ok(url)
     }
 
     pub async fn connect(&mut self) -> Result<(), Error> {
-        self.get_wss_url().await.unwrap();
-        if let Some(url) = &self.wss_url {
-            let (mut socket, _response) = connect(url).expect("Can't connect");
-            let msg = socket.read_message().expect("Error reading message");
-            println!("recevied hello: {:?}", msg);
-            self.socket = Some(socket);
-            Ok(())
-        } else {
-            Err(Error::new(ErrorKind::Other, "oh no!"))
-        }
+        let url = self.get_wss_url().await.expect("Could not get wss url");
+        let (mut socket, _response) = connect(url).expect("Can't connect");
+        let msg = socket.read_message().expect("Error reading message");
+        println!("recevied hello: {:?}", msg);
+        self.socket = Some(socket);
+        Ok(())
     }
     pub fn get_token_from_file(filename: &str) -> Result<String, std::io::Error> {
         let t = fs::read_to_string(filename)?;
