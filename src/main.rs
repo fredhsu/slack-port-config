@@ -32,8 +32,7 @@ async fn get_tag_assignment(
     };
     let device_json = cv.get_tag_assignment(data).await?;
     // TODO: Better error handling here, should we return an error if there is no assignment?
-    let assignment = serde_json::from_str(&device_json).unwrap_or(Vec::new());
-    Ok(assignment)
+    Ok(serde_json::from_str(&device_json).unwrap_or_default())
 }
 
 async fn _get_inventory(cv: &cvp::Host) -> Result<(), reqwest::Error> {
