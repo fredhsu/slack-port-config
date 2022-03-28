@@ -2,97 +2,12 @@ use std::collections::HashMap;
 
 use chrono::prelude::*;
 use cvp::{Action, Approval, Change, ChangeConfig, RootStage, Stage, StageRow};
-use serde::{Deserialize, Serialize};
 use slack::*;
 use tungstenite::Message;
 
 use crate::cvp::StartChange;
 mod cvp;
 mod slack;
-
-#[derive(Deserialize, Debug)]
-struct AppsConnectionsOpenResponse {
-    ok: bool,
-    url: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct ChannelsResponse {
-    ok: bool,
-    channels: Vec<Channel>,
-}
-
-#[derive(Deserialize, Debug)]
-struct Channel {
-    id: String,
-    name: String,
-    is_channel: bool,
-    created: u32,
-    creator: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Response {
-    envelope_id: String,
-    payload: BlockPayload,
-}
-
-// TODO: create enum for event payloads and event_types
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-enum EventPayload {
-    #[serde(rename = "event_callback")]
-    EventCallback(EventCallback),
-}
-
-#[derive(Deserialize, Debug)]
-struct EventCallback {
-    token: String,
-    team_id: String,
-    event: AppMention,
-    event_id: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct Hello {
-    num_connections: u32,
-    debug_info: DebugInfo,
-    connection_info: ConnectionInfo,
-}
-#[derive(Deserialize, Debug)]
-struct DebugInfo {
-    host: String,
-    build_number: u32,
-    approximate_connection_time: u32,
-}
-#[derive(Deserialize, Debug)]
-struct ConnectionInfo {
-    app_id: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct AppMention {
-    #[serde(rename = "type")]
-    event_type: String,
-    user: String,
-    text: String,
-    ts: String,
-    channel: String,
-    event_ts: String,
-}
-
-#[derive(Deserialize, Debug)]
-enum EventType {
-    #[serde(rename = "slash_command")]
-    SlashCommand,
-    #[serde(rename = "events_api")]
-    EventsAPI,
-    #[serde(rename = "hello")]
-    Hello,
-    #[serde(rename = "event_callback")]
-    EventCallback,
-}
 
 async fn get_tag_assignment(
     cv: &cvp::Host,
@@ -145,9 +60,6 @@ async fn main() -> Result<(), reqwest::Error> {
     cv.get_token_from_file("tokens/token.txt".to_string())
         .unwrap();
 
-    // let device = "SSJ17200818";
-    // let interface = "Ethernet1";
-    // execute_shut_action(&cv, device, interface).await;
     let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
     let mut slack = slack::Client::new(slack_token);
 
@@ -241,15 +153,14 @@ async fn portcheck(cv: &cvp::Host, walljack: &str, envelope_id: &str, slack: &mu
     let device = get_tag_assignment(cv, "wall_jack".to_string(), walljack.to_string())
         .await
         .unwrap();
-    let resp_text;
-    if let Some(first_device) = device.first() {
-        resp_text = format!(
+    let resp_text = if let Some(first_device) = device.first() {
+        format!(
             "Wall jack: {} is connected to port {} on switch {}",
             walljack, &first_device.value.key.interface_id, &first_device.value.key.device_id
-        );
+        )
     } else {
-        resp_text = "Wall jack number was not found".to_string();
-    }
+        "Wall jack number was not found".to_string()
+    };
     let block2 = Block::new_section(TextBlock::new_mrkdwn(resp_text));
     let blocks = vec![block2];
     let payload = BlockPayload::new(blocks);
