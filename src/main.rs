@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 
 use chrono::prelude::*;
-use cvp::{Action, Approval, Change, ChangeConfig, RootStage, Stage, StageRow};
+use cvp::{Action, Approval, Change, ChangeConfig, CloudVisionError, RootStage, Stage, StageRow};
 use slack::*;
 use tungstenite::Message;
 
 use crate::cvp::StartChange;
-mod cvp;
+pub mod cvp;
 mod slack;
 
 async fn get_tag_assignment(
     cv: &cvp::Host,
     label: String,
     value: String,
-) -> Result<Vec<cvp::InterfaceResponse>, reqwest::Error> {
+) -> Result<Vec<cvp::InterfaceResponse>, CloudVisionError> {
     /*
     workspace_id: "",
     element_type: ELEMENT_TYPE_INTERFACE,
@@ -35,7 +35,7 @@ async fn get_tag_assignment(
     Ok(serde_json::from_str(&device_json).unwrap_or_default())
 }
 
-async fn _get_inventory(cv: &cvp::Host) -> Result<(), reqwest::Error> {
+async fn _get_inventory(cv: &cvp::Host) -> Result<(), CloudVisionError> {
     let inventory = cv.get_all_devices().await?;
     println!("Getting Inventory");
     println!("{}", inventory);

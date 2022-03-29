@@ -1,8 +1,19 @@
-//use chrono::prelude::*;
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs};
 use uuid::Uuid;
+
+#[derive(Debug)]
+pub enum CloudVisionError {
+    NoToken,
+    Request(reqwest::Error),
+}
+
+impl From<reqwest::Error> for CloudVisionError {
+    fn from(err: reqwest::Error) -> Self {
+        CloudVisionError::Request(err)
+    }
+}
 
 pub struct Host {
     hostname: String,
@@ -195,12 +206,10 @@ impl Host {
             .json::<TokenResponse>()
             .await?;
         self.token = Some(response.cookie.value);
-        println!("token is {:?}", &self.token);
-
         Ok(())
     }
 
-    pub async fn get(&self, path: &str) -> Result<String, reqwest::Error> {
+    pub async fn get(&self, path: &str) -> Result<String, CloudVisionError> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
             let client = reqwest::Client::builder()
@@ -216,11 +225,10 @@ impl Host {
                 .await?;
             Ok(response)
         } else {
-            // TODO: use an error to indicate no token
-            Ok("API call needs token first".to_string())
+            Err(CloudVisionError::NoToken)
         }
     }
-    async fn post(&self, path: &str, body: String) -> Result<String, reqwest::Error> {
+    async fn post(&self, path: &str, body: String) -> Result<String, CloudVisionError> {
         if let Some(token) = &self.token {
             let url = format!("https://{}{}", self.hostname, path);
             let client = reqwest::Client::builder()
@@ -237,11 +245,10 @@ impl Host {
                 .await?;
             Ok(response)
         } else {
-            // TODO: use an error to indicate no token
-            Ok("".to_string())
+            Err(CloudVisionError::NoToken)
         }
     }
-    pub async fn get_tags(&self) -> Result<String, reqwest::Error> {
+    pub async fn get_tags(&self) -> Result<String, CloudVisionError> {
         let path = "/api/resources/tag/v2/Tag/all";
         // TODO: replace this with the url above when cvaas is fixed
         // let path = "/api/v3/services/arista.tag.v2.Tag/GetAll";
@@ -261,7 +268,7 @@ impl Host {
     pub async fn get_tag_assignment(
         &self,
         partial_eq_filter: PartialEqFilter,
-    ) -> Result<String, reqwest::Error> {
+    ) -> Result<String, CloudVisionError> {
         // let path = "/api/resources/tag/v2/TagAssignment/all";
         // TODO: replace this with the url above when cvaas is fixed
         let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
@@ -270,18 +277,18 @@ impl Host {
         self.post(path, json_data).await
     }
 
-    pub async fn get_all_devices(&self) -> Result<String, reqwest::Error> {
+    pub async fn get_all_devices(&self) -> Result<String, CloudVisionError> {
         let path = "/api/resources/inventory/v1/Device/all";
         self.get(path).await
     }
-    pub async fn get_device(&self, device_id: &str) -> Result<String, reqwest::Error> {
+    pub async fn get_device(&self, device_id: &str) -> Result<String, CloudVisionError> {
         let path = format!(
             "/api/resources/inventory/v1/Device?key.deviceId={}",
             device_id
         );
         self.get(&path).await
     }
-    pub async fn post_change_control(&self, change: String) -> Result<String, reqwest::Error> {
+    pub async fn post_change_control(&self, change: String) -> Result<String, CloudVisionError> {
         let path = "/api/v3/services/ccapi.ChangeControl/Update".to_string();
         self.post(&path, change).await
     }
@@ -289,7 +296,7 @@ impl Host {
     pub async fn approve_change_control(
         &self,
         approval: Approval,
-    ) -> Result<String, reqwest::Error> {
+    ) -> Result<String, CloudVisionError> {
         let approval_json = serde_json::to_string(&approval).unwrap();
         let path = "/api/v3/services/ccapi.ChangeControl/AddApproval".to_string();
         println!("Approving: {}", &approval_json);
@@ -298,9 +305,8 @@ impl Host {
     pub async fn execute_change_control(
         &self,
         start: StartChange,
-    ) -> Result<String, reqwest::Error> {
+    ) -> Result<String, CloudVisionError> {
         let start_json = serde_json::to_string(&start).unwrap();
-        println!("Starting: {}", &start_json);
         let path = "/api/v3/services/ccapi.ChangeControl/Start".to_string();
         self.post(&path, start_json).await
     }
