@@ -7,11 +7,17 @@ use uuid::Uuid;
 pub enum CloudVisionError {
     NoToken,
     Request(reqwest::Error),
+    JsonParse(serde_json::Error),
 }
 
 impl From<reqwest::Error> for CloudVisionError {
     fn from(err: reqwest::Error) -> Self {
         CloudVisionError::Request(err)
+    }
+}
+impl From<serde_json::Error> for CloudVisionError {
+    fn from(err: serde_json::Error) -> Self {
+        CloudVisionError::JsonParse(err)
     }
 }
 
@@ -40,6 +46,8 @@ pub struct PartialEqFilter {
 pub struct Tag {
     pub key: TagKey,
 }
+
+// TODO: reduce pub fields
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TagKey {
     pub workspace_id: String,
@@ -262,7 +270,7 @@ impl Host {
         let data = PartialEqFilter {
             partial_eq_filter: vec![filter],
         };
-        let json_data = serde_json::to_string(&data).unwrap();
+        let json_data = serde_json::to_string(&data)?;
         self.post(path, json_data).await
     }
     pub async fn get_tag_assignment(
@@ -272,8 +280,7 @@ impl Host {
         // let path = "/api/resources/tag/v2/TagAssignment/all";
         // TODO: replace this with the url above when cvaas is fixed
         let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
-        let json_data = serde_json::to_string(&partial_eq_filter).unwrap();
-        // println!("Filter is : {}", json_data);
+        let json_data = serde_json::to_string(&partial_eq_filter)?;
         self.post(path, json_data).await
     }
 
@@ -297,7 +304,7 @@ impl Host {
         &self,
         approval: Approval,
     ) -> Result<String, CloudVisionError> {
-        let approval_json = serde_json::to_string(&approval).unwrap();
+        let approval_json = serde_json::to_string(&approval)?;
         let path = "/api/v3/services/ccapi.ChangeControl/AddApproval".to_string();
         println!("Approving: {}", &approval_json);
         self.post(&path, approval_json).await
@@ -306,7 +313,7 @@ impl Host {
         &self,
         start: StartChange,
     ) -> Result<String, CloudVisionError> {
-        let start_json = serde_json::to_string(&start).unwrap();
+        let start_json = serde_json::to_string(&start)?;
         let path = "/api/v3/services/ccapi.ChangeControl/Start".to_string();
         self.post(&path, start_json).await
     }
