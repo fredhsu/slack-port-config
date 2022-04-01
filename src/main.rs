@@ -14,14 +14,8 @@ async fn get_tag_assignment(
     label: String,
     value: String,
 ) -> Result<Vec<cvp::InterfaceResponse>, CloudVisionError> {
-    /*
-    workspace_id: "",
-    element_type: ELEMENT_TYPE_INTERFACE,
-    label: "wall_jack",
-    value: "sjc1-04-1",
-    */
     let workspace_key = cvp::TagKey {
-        workspace_id: "".to_string(),
+        workspace_id: None,
         element_type: Some("ELEMENT_TYPE_INTERFACE".to_string()),
         label: Some(label.to_string()),
         value: Some(value.to_string()),
@@ -30,9 +24,13 @@ async fn get_tag_assignment(
     let data = cvp::PartialEqFilter {
         partial_eq_filter: vec![filter],
     };
-    let device_json = cv.get_tag_assignment(data).await?;
+    let device_json = cv.get_tag_assignment_config(data).await?;
+    println!("device: {}", &device_json);
+    // TODO: use stream deserializer here for the json stream response
+    // https://docs.serde.rs/serde_json/struct.StreamDeserializer.html
     // TODO: Better error handling here, should we return an error if there is no assignment?
-    Ok(serde_json::from_str(&device_json).unwrap_or_default())
+    let result: cvp::TagAssignmentConfigResponse = serde_json::from_str(&device_json).unwrap();
+    Ok(vec![result.result])
 }
 
 async fn _get_inventory(cv: &cvp::Host) -> Result<(), CloudVisionError> {

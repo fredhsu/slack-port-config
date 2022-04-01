@@ -50,7 +50,7 @@ pub struct Tag {
 // TODO: reduce pub fields
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TagKey {
-    pub workspace_id: String,
+    pub workspace_id: Option<String>,
     pub element_type: Option<String>,
     //TODO make elementtype enum
     pub label: Option<String>,
@@ -69,6 +69,10 @@ pub struct InterfaceQueryResponse {
     pub value: Vec<InterfaceResponse>,
 }
 #[derive(Serialize, Deserialize, Debug)]
+pub struct TagAssignmentConfigResponse {
+    pub result: InterfaceResponse,
+}
+#[derive(Serialize, Deserialize, Debug)]
 pub struct InterfaceResponse {
     pub value: Interface,
 }
@@ -78,6 +82,7 @@ pub struct Interface {
     pub key: InterfaceKey,
 }
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct InterfaceKey {
     pub workspace_id: String,
     pub element_type: String,
@@ -251,6 +256,7 @@ impl Host {
                 .await?
                 .text()
                 .await?;
+            println!("POST response: {}", &response);
             Ok(response)
         } else {
             Err(CloudVisionError::NoToken)
@@ -261,7 +267,7 @@ impl Host {
         // TODO: replace this with the url above when cvaas is fixed
         // let path = "/api/v3/services/arista.tag.v2.Tag/GetAll";
         let workspace_key = TagKey {
-            workspace_id: "".to_string(),
+            workspace_id: None,
             element_type: None,
             label: None,
             value: None,
@@ -273,13 +279,13 @@ impl Host {
         let json_data = serde_json::to_string(&data)?;
         self.post(path, json_data).await
     }
-    pub async fn get_tag_assignment(
+    pub async fn get_tag_assignment_config(
         &self,
         partial_eq_filter: PartialEqFilter,
     ) -> Result<String, CloudVisionError> {
-        // let path = "/api/resources/tag/v2/TagAssignment/all";
+        let path = "/api/resources/tag/v2/TagAssignmentConfig/all";
         // TODO: replace this with the url above when cvaas is fixed
-        let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
+        // let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
         let json_data = serde_json::to_string(&partial_eq_filter)?;
         self.post(path, json_data).await
     }
