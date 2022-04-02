@@ -1,8 +1,10 @@
 use reqwest::header::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs};
+use url::Url;
 use uuid::Uuid;
 
+/// Wraps error types when working with CloudVision APIs or parsing
 #[derive(Debug)]
 pub enum CloudVisionError {
     NoToken,
@@ -21,12 +23,12 @@ impl From<serde_json::Error> for CloudVisionError {
     }
 }
 
+// A CloudVision host
 pub struct Host {
     hostname: String,
     port: u32,
-    username: String,
-    password: String,
     token: Option<String>,
+    pub base_url: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -68,6 +70,8 @@ pub enum ElementType {
 pub struct InterfaceQueryResponse {
     pub value: Vec<InterfaceResponse>,
 }
+
+// TODO: Generalize to handle different response types
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TagAssignmentConfigResponse {
     pub result: InterfaceResponse,
@@ -187,14 +191,20 @@ pub struct StartChange {
 }
 
 impl Host {
-    pub fn new(hostname: &str, port: u32, username: &str, password: &str) -> Self {
+    pub fn new(hostname: &str, port: u32) -> Self {
         Host {
             hostname: hostname.to_string(),
             port,
-            username: username.to_string(),
-            password: password.to_string(),
             token: None,
+            //base_url: format!("https://{}:{}", hostname, port),
+            base_url: format!("https://{}", hostname),
         }
+    }
+    pub fn build_url(&self, path: &str) -> String {
+        let mut url = Url::parse(&self.base_url).unwrap();
+        url.set_path(path);
+        url.as_str().to_string()
+        //format!("{}{}", self.base_url, path)
     }
 
     pub fn get_token_from_file(&mut self, filename: String) -> Result<(), std::io::Error> {
@@ -204,27 +214,9 @@ impl Host {
         Ok(())
     }
 
-    // get_token is only useful for on prem CVP
-    pub async fn get_token_from_auth(&mut self) -> Result<(), reqwest::Error> {
-        let path = "/cvpservice/login/authenticate.do";
-        let url = format!("https://{}:{}{}", self.hostname, self.port, path);
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()?;
-        let response = client
-            .post(url)
-            .basic_auth(&self.username, Some(&self.password))
-            .send()
-            .await?
-            .json::<TokenResponse>()
-            .await?;
-        self.token = Some(response.cookie.value);
-        Ok(())
-    }
-
     pub async fn get(&self, path: &str) -> Result<String, CloudVisionError> {
         if let Some(token) = &self.token {
-            let url = format!("https://{}{}", self.hostname, path);
+            let url = self.build_url(path);
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()?;
@@ -243,7 +235,7 @@ impl Host {
     }
     async fn post(&self, path: &str, body: String) -> Result<String, CloudVisionError> {
         if let Some(token) = &self.token {
-            let url = format!("https://{}{}", self.hostname, path);
+            let url = self.build_url(path);
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()?;
@@ -279,13 +271,13 @@ impl Host {
         let json_data = serde_json::to_string(&data)?;
         self.post(path, json_data).await
     }
+
+    // TODO rework these to return proper values, will need introspection on json deserialization
     pub async fn get_tag_assignment_config(
         &self,
         partial_eq_filter: PartialEqFilter,
     ) -> Result<String, CloudVisionError> {
         let path = "/api/resources/tag/v2/TagAssignmentConfig/all";
-        // TODO: replace this with the url above when cvaas is fixed
-        // let path = "/api/v3/services/arista.tag.v2.TagAssignmentService/GetAll";
         let json_data = serde_json::to_string(&partial_eq_filter)?;
         self.post(path, json_data).await
     }
@@ -330,7 +322,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_get_token_from_file() {
-        let mut cv = Host::new("foo", 443, "user", "pass");
+        let mut cv = Host::new("foo", 443);
         cv.get_token_from_file("tokens/token.txt".to_string())
             .unwrap();
         if let Some(token) = cv.token {
@@ -338,5 +330,11 @@ mod tests {
         } else {
             panic!("did not read file");
         }
+    }
+    #[test]
+    fn test_build_url() {
+        let cv = Host::new("foo", 443);
+        let url = cv.build_url("/bar");
+        assert_eq!(url, "https://foo:443/bar");
     }
 }

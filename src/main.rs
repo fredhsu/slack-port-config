@@ -42,18 +42,7 @@ async fn _get_inventory(cv: &cvp::Host) -> Result<(), CloudVisionError> {
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
-    let mut cv = cvp::Host::new(
-        "www.cv-staging.corp.arista.io",
-        443,
-        "fredlhsu@arista.com",
-        "arista",
-    );
-    // let mut cv = cvp::Host::new(
-    //     "10.90.226.175",
-    //     443,
-    //     "cvpadmin",
-    //     "arista123!",
-    // );
+    let mut cv = cvp::Host::new("www.cv-staging.corp.arista.io", 443);
     cv.get_token_from_file("tokens/token.txt".to_string())
         .unwrap();
 
