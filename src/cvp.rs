@@ -23,6 +23,30 @@ impl From<serde_json::Error> for CloudVisionError {
     }
 }
 
+pub struct Config {
+    pub hostname: String,
+    pub port: u32,
+    pub token: String,
+}
+
+impl Config {
+    pub fn new(hostname: String, port: u32, token: String) -> Self {
+        Self {
+            hostname,
+            port,
+            token,
+        }
+    }
+    pub fn from_file(filename: String) -> Self {
+        // readfile
+        unimplemented!();
+    }
+    pub fn from_env() -> Self {
+        // read env
+        unimplemented!();
+    }
+}
+
 // A CloudVision host
 pub struct Host {
     hostname: String,
