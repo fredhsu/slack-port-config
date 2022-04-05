@@ -25,12 +25,12 @@ impl From<serde_json::Error> for CloudVisionError {
 
 pub struct Config {
     pub hostname: String,
-    pub port: u32,
+    pub port: u16,
     pub token: String,
 }
 
 impl Config {
-    pub fn new(hostname: String, port: u32, token: String) -> Self {
+    pub fn new(hostname: String, port: u16, token: String) -> Self {
         Self {
             hostname,
             port,
@@ -50,7 +50,7 @@ impl Config {
 // A CloudVision host
 pub struct Host {
     hostname: String,
-    port: u32,
+    port: u16,
     token: Option<String>,
     pub base_url: String,
 }
@@ -215,7 +215,7 @@ pub struct StartChange {
 }
 
 impl Host {
-    pub fn new(hostname: &str, port: u32) -> Self {
+    pub fn new(hostname: &str, port: u16) -> Self {
         Host {
             hostname: hostname.to_string(),
             port,
@@ -227,6 +227,7 @@ impl Host {
     pub fn build_url(&self, path: &str) -> String {
         let mut url = Url::parse(&self.base_url).unwrap();
         url.set_path(path);
+        url.set_port(Some(self.port));
         url.as_str().to_string()
         //format!("{}{}", self.base_url, path)
     }
@@ -357,8 +358,8 @@ mod tests {
     }
     #[test]
     fn test_build_url() {
-        let cv = Host::new("foo", 443);
+        let cv = Host::new("foo", 8000);
         let url = cv.build_url("/bar");
-        assert_eq!(url, "https://foo:443/bar");
+        assert_eq!(url, "https://foo:8000/bar");
     }
 }

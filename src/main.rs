@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use chrono::prelude::*;
 use cvp::{Action, Approval, Change, ChangeConfig, CloudVisionError, RootStage, Stage, StageRow};
@@ -6,8 +7,12 @@ use slack::*;
 use tungstenite::Message;
 
 use crate::cvp::StartChange;
+//use serde_derive::Deserialize;
+
 pub mod cvp;
 mod slack;
+
+use clap::Parser;
 
 async fn get_tag_assignment(
     cv: &cvp::Host,
@@ -40,8 +45,70 @@ async fn _get_inventory(cv: &cvp::Host) -> Result<(), CloudVisionError> {
     Ok(())
 }
 
+/// Command line arguments
+#[derive(Parser, Debug, PartialEq)]
+#[clap(author, version, about)]
+struct Cli {
+    #[clap(long)]
+    cvp_host: Option<String>,
+    #[clap(long)]
+    cvp_port: Option<u32>,
+    #[clap(long)]
+    cvp_token: Option<String>,
+    #[clap(long)]
+    slack_token: Option<String>,
+    #[clap(short, long, parse(from_os_str), value_name = "FILE")]
+    config_file: Option<PathBuf>,
+}
+
+#[derive(PartialEq, Debug)]
+struct Config {
+    cloudvision: CloudVisionConfig,
+    slack: SlackConfig,
+}
+
+#[derive(PartialEq, Debug)]
+struct SlackConfig {
+    token: String,
+}
+
+#[derive(PartialEq, Debug)]
+struct CloudVisionConfig {
+    hostname: String,
+    port: u32,
+    token: String,
+}
+
+impl Config {
+    fn new_from_toml(toml_str: &str) -> Self {
+        let cloudvision = CloudVisionConfig {
+            hostname: "www.cv-staging.arista.io".to_string(),
+            port: 443,
+            token: "cvptoken".to_string(),
+        };
+        let slack = SlackConfig {
+            token: "slacktoken".to_string(),
+        };
+        Config { cloudvision, slack }
+    }
+    fn new_from_cli(cli: Cli) -> Self {
+        let cloudvision = CloudVisionConfig {
+            hostname: cli.cvp_host.unwrap_or_default(),
+            port: cli.cvp_port.unwrap_or_default(),
+            token: cli.cvp_token.unwrap_or_default(),
+        };
+        let slack = SlackConfig {
+            token: cli.slack_token.unwrap_or_default(),
+        };
+        Config { cloudvision, slack }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
+    // Options should be command line, config file, or env var
+    let cli = Cli::parse();
+    println!("{:?}", cli);
     let mut cv = cvp::Host::new("www.cv-staging.corp.arista.io", 443);
     cv.get_token_from_file("tokens/token.txt".to_string())
         .unwrap();
@@ -314,6 +381,51 @@ fn build_action_change(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_new_from_toml() {
+        let toml_str = r#"
+        [cloudvision]
+        hostname = "www.cv-staging.arista.io"
+        port = 443
+        token = "cvptoken"
+        [slack]
+        token = "slacktoken"
+        "#;
+        let config = Config::new_from_toml(toml_str);
+        let cloudvision = CloudVisionConfig {
+            hostname: "www.cv-staging.arista.io".to_string(),
+            port: 443,
+            token: "cvptoken".to_string(),
+        };
+        let slack = SlackConfig {
+            token: "slacktoken".to_string(),
+        };
+        let base_config = Config { cloudvision, slack };
+        assert_eq!(config, base_config);
+    }
+    #[test]
+    fn test_new_from_cli() {
+        let config_file = Some(PathBuf::from("config.toml"));
+
+        let cli = Cli {
+            cvp_host: Some("www.cv-staging.arista.io".to_string()),
+            cvp_port: Some(443),
+            cvp_token: Some("cvptoken".to_string()),
+            slack_token: Some("slacktoken".to_string()),
+            config_file,
+        };
+        let config = Config::new_from_cli(cli);
+        let cloudvision = CloudVisionConfig {
+            hostname: "www.cv-staging.arista.io".to_string(),
+            port: 443,
+            token: "cvptoken".to_string(),
+        };
+        let slack = SlackConfig {
+            token: "slacktoken".to_string(),
+        };
+        let base_config = Config { cloudvision, slack };
+        assert_eq!(config, base_config);
+    }
     #[test]
     fn test_action_change() {
         let device = "JPE1999";
