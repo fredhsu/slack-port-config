@@ -15,6 +15,7 @@ TODO: Insert image
 	`slack-port-config -c config.toml`
 
 ## Config file example:
+*config.toml*
 ```
 [cloudvision]
 hostname = "www.cv-staging.arista.io"

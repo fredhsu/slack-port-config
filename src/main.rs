@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::{collections::HashMap, fs};
 
 use chrono::prelude::*;
 use cvp::{Action, Approval, Change, ChangeConfig, CloudVisionError, RootStage, Stage, StageRow};
+use serde::Deserialize;
 use slack::*;
 use tungstenite::Message;
 
@@ -61,18 +62,18 @@ struct Cli {
     config_file: Option<PathBuf>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize)]
 struct Config {
     cloudvision: CloudVisionConfig,
     slack: SlackConfig,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize)]
 struct SlackConfig {
     token: String,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize)]
 struct CloudVisionConfig {
     hostname: String,
     port: u32,
@@ -81,15 +82,7 @@ struct CloudVisionConfig {
 
 impl Config {
     fn new_from_toml(toml_str: &str) -> Self {
-        let cloudvision = CloudVisionConfig {
-            hostname: "www.cv-staging.arista.io".to_string(),
-            port: 443,
-            token: "cvptoken".to_string(),
-        };
-        let slack = SlackConfig {
-            token: "slacktoken".to_string(),
-        };
-        Config { cloudvision, slack }
+        toml::from_str(toml_str).unwrap()
     }
     fn new_from_cli(cli: Cli) -> Self {
         let cloudvision = CloudVisionConfig {
@@ -104,13 +97,26 @@ impl Config {
     }
 }
 
+fn read_config_file(filename: &Path) -> Config {
+    let toml_str = fs::read_to_string(filename).expect("Error reading config file");
+    Config::new_from_toml(&toml_str)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     // Options should be command line, config file, or env var
     let cli = Cli::parse();
     println!("{:?}", cli);
+    let config = if let Some(config_file) = cli.config_file.as_deref() {
+        read_config_file(config_file)
+    } else {
+        Config::new_from_cli(cli)
+    };
+    println!("{:?}", config);
+
     let mut cv = cvp::Host::new("www.cv-staging.corp.arista.io", 443);
-    cv.get_token_from_file("tokens/token.txt".to_string())
+
+    cv.get_token_from_file("tokens/paul-token.txt".to_string())
         .unwrap();
 
     let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
