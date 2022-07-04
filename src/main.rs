@@ -41,8 +41,7 @@ async fn get_tag_assignment(
 
 async fn _get_inventory(cv: &cvp::Host) -> Result<(), CloudVisionError> {
     let inventory = cv.get_all_devices().await?;
-    println!("Getting Inventory");
-    println!("{}", inventory);
+    println!("Getting inventory: \n{}", inventory);
     Ok(())
 }
 
@@ -116,10 +115,13 @@ async fn main() -> Result<(), reqwest::Error> {
 
     let mut cv = cvp::Host::new("www.cv-staging.corp.arista.io", 443);
 
-    cv.get_token_from_file("tokens/paul-token.txt".to_string())
+    cv.get_token_from_file("tokens/token.txt.1".to_string())
         .unwrap();
 
+    cv.token = Some(config.cloudvision.token);
+
     let slack_token = slack::Client::get_token_from_file("tokens/slack.token").unwrap();
+    let slack_token = config.slack.token;
     let mut slack = slack::Client::new(slack_token);
 
     slack.connect().await.unwrap();
@@ -260,6 +262,7 @@ async fn port_no_shut(
         .await
         .unwrap();
     if let Some(first_device) = device.first() {
+        println!("No shut {:?} ", &first_device);
         resp_text = format!("Wall jack: {} has been enabled", walljack);
         execute_no_shut_action(
             cv,

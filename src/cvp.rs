@@ -51,7 +51,7 @@ impl Config {
 pub struct Host {
     hostname: String,
     port: u16,
-    token: Option<String>,
+    pub token: Option<String>,
     pub base_url: String,
 }
 
